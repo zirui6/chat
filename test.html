@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>测试聊天入口</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #0a0a1a;
+            color: #e8e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            border: 1px solid #2a2a45;
+        }
+        .icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
+        h2 { text-align: center; margin-bottom: 8px; }
+        p { text-align: center; color: #8a8aaa; font-size: 14px; margin-bottom: 24px; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #a0a0c0;
+            margin-bottom: 4px;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 14px;
+            background: #222240;
+            border: 1px solid #2a2a45;
+            border-radius: 8px;
+            color: #e8e8f0;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            border-color: #4a6cf7;
+            box-shadow: 0 0 0 3px rgba(74, 108, 247, 0.15);
+        }
+        .form-group select option { background: #1a1a2e; }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #4a6cf7;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .btn-success { background: #22c55e; }
+        .btn-secondary { background: #2a2a4a; }
+        .btn-group { display: flex; gap: 10px; margin-top: 12px; }
+        .btn-group .btn { width: 50%; }
+        .preset-users {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .preset-users button {
+            padding: 6px 14px;
+            background: #222240;
+            border: 1px solid #2a2a45;
+            border-radius: 6px;
+            color: #a0a0c0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .preset-users button:hover {
+            border-color: #4a6cf7;
+            color: #e8e8f0;
+            background: #2a2a4a;
+        }
+        .hint {
+            font-size: 12px;
+            color: #666688;
+            margin-top: 4px;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid #2a2a45;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="icon">🧪</div>
+    <h2>测试聊天入口</h2>
+    <p>输入用户信息直接进入聊天（无需登录）</p>
+
+    <!-- 预设用户 -->
+    <div class="preset-users">
+        <button onclick="loadPreset('user1')">👤 用户1</button>
+        <button onclick="loadPreset('user2')">👤 用户2</button>
+        <button onclick="loadPreset('user3')">👤 用户3</button>
+        <button onclick="loadPreset('admin')">👑 管理员</button>
+        <button onclick="loadPreset('custom')">✏️ 自定义</button>
+    </div>
+
+    <hr class="divider" />
+
+    <form id="testForm" onsubmit="enterChat(event)">
+        <div class="form-group">
+            <label>🆔 用户ID</label>
+            <input type="text" id="userId" placeholder="例如: 12345" required />
+            <div class="hint">唯一标识，任意数字或字符串</div>
+        </div>
+
+        <div class="form-group">
+            <label>👤 用户名</label>
+            <input type="text" id="userName" placeholder="例如: 测试用户" required />
+        </div>
+
+        <div class="form-group">
+            <label>📧 邮箱（选填）</label>
+            <input type="email" id="userEmail" placeholder="test@example.com" />
+        </div>
+
+        <div class="form-group">
+            <label>🖼️ 头像（选填）</label>
+            <input type="text" id="userAvatar" placeholder="https://example.com/avatar.jpg" />
+        </div>
+
+        <button type="submit" class="btn">💬 进入聊天</button>
+    </form>
+
+    <div class="btn-group">
+        <button class="btn btn-secondary" onclick="clearAll()">🗑️ 清空</button>
+        <button class="btn btn-secondary" onclick="window.location.href='index.html'">🏠 返回</button>
+    </div>
+</div>
+
+<script>
+    // ============================================================
+    // 预设用户数据
+    // ============================================================
+    const PRESETS = {
+        user1: {
+            id: '10001',
+            username: '张小明',
+            email: 'zhang@example.com',
+            avatar_url: 'https://i.pravatar.cc/150?img=1'
+        },
+        user2: {
+            id: '10002',
+            username: '李小红',
+            email: 'li@example.com',
+            avatar_url: 'https://i.pravatar.cc/150?img=5'
+        },
+        user3: {
+            id: '10003',
+            username: '王大力',
+            email: 'wang@example.com',
+            avatar_url: 'https://i.pravatar.cc/150?img=11'
+        },
+        admin: {
+            id: 'admin_001',
+            username: '管理员',
+            email: 'admin@example.com',
+            avatar_url: 'https://i.pravatar.cc/150?img=12'
+        },
+        custom: {
+            id: '99999',
+            username: '自定义用户',
+            email: 'custom@example.com',
+            avatar_url: 'https://i.pravatar.cc/150?img=20'
+        }
+    };
+
+    // ============================================================
+    // 加载预设
+    // ============================================================
+    function loadPreset(name) {
+        const user = PRESETS[name];
+        if (!user) return;
+
+        document.getElementById('userId').value = user.id;
+        document.getElementById('userName').value = user.username;
+        document.getElementById('userEmail').value = user.email || '';
+        document.getElementById('userAvatar').value = user.avatar_url || '';
+    }
+
+    // ============================================================
+    // 清空表单
+    // ============================================================
+    function clearAll() {
+        document.getElementById('userId').value = '';
+        document.getElementById('userName').value = '';
+        document.getElementById('userEmail').value = '';
+        document.getElementById('userAvatar').value = '';
+    }
+
+    // ============================================================
+    // 进入聊天
+    // ============================================================
+    function enterChat(event) {
+        event.preventDefault();
+
+        const id = document.getElementById('userId').value.trim();
+        const username = document.getElementById('userName').value.trim();
+        const email = document.getElementById('userEmail').value.trim();
+        const avatar = document.getElementById('userAvatar').value.trim();
+
+        if (!id || !username) {
+            alert('请至少填写用户ID和用户名');
+            return;
+        }
+
+        // 构建用户数据
+        const userData = {
+            id: id,
+            username: username,
+            display_name: username,
+            email: email || id + '@test.user',
+            avatar_url: avatar || 'https://zirui6.github.io/touxiang.jpg'
+        };
+
+        // 编码并跳转
+        const encoded = encodeURIComponent(JSON.stringify(userData));
+        window.location.href = 'get.html?user=' + encoded;
+    }
+
+    // ============================================================
+    // 自动加载第一个预设（方便测试）
+    // ============================================================
+    loadPreset('user1');
+</script>
+
+</body>
+</html>
