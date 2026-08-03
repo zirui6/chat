@@ -1,13 +1,83 @@
-<!doctype html>
-<html lang="en">
-  <head>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>chat</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <title>梓睿聊天</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+    <!-- ===== 未登录遮罩 ===== -->
+    <div id="loginOverlay">
+        <div class="icon">🔒</div>
+        <h2>未登录</h2>
+        <p>请先登录梓睿账号</p>
+        <button class="btn-login" onclick="goToLogin()">🔑 去登录</button>
+    </div>
+
+    <!-- ===== Toast ===== -->
+    <div class="toast" id="toast"></div>
+
+    <!-- ===== 主应用 ===== -->
+    <div class="app" id="app">
+        <!-- 功能栏 -->
+        <div class="funcbar">
+            <div class="logo" onclick="location.reload()">💬</div>
+            <button class="func-item active" data-tab="chat">💬<span class="badge" id="totalBadge" style="display:none;">0</span></button>
+            <button class="func-item" data-tab="friends">👥</button>
+            <button class="func-item" data-tab="files">📁</button>
+            <div class="func-spacer"></div>
+            <button class="func-item" data-tab="settings">⚙️</button>
+            <button class="func-item avatar" id="avatarBtn">
+                <img id="myAvatar" src="https://zirui6.github.io/touxiang.jpg" alt="头像" />
+            </button>
+        </div>
+
+        <!-- 侧边栏 -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header"><div class="title">💬 聊天</div></div>
+            <div class="sidebar-search">
+                <input type="text" id="searchInput" placeholder="🔍 搜索..." />
+                <button class="btn-icon" id="addFriendBtn">➕</button>
+            </div>
+            <div class="chat-list" id="chatList">
+                <div style="text-align:center;padding:40px 0;color:#666688;">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 聊天窗口 -->
+        <div class="chat-window" id="chatWindow">
+            <div class="empty-state" id="emptyState">
+                <div class="icon">💬</div>
+                <h3>选择聊天</h3>
+                <p>从左侧选择好友开始聊天</p>
+            </div>
+            <div class="chat-header" id="chatHeader" style="display:none;">
+                <div class="user">
+                    <img id="chatAvatar" src="https://zirui6.github.io/touxiang.jpg" alt="" />
+                    <div>
+                        <div class="name" id="chatName">用户</div>
+                        <div class="status" id="chatStatus">在线</div>
+                    </div>
+                </div>
+            </div>
+            <div class="message-list" id="messageList"></div>
+            <div class="chat-input" id="chatInput" style="display:none;">
+                <div class="tools">
+                    <button class="btn-icon" id="fileBtn">📎</button>
+                    <button class="btn-icon" id="imageBtn">🖼️</button>
+                    <input type="file" id="fileInput" accept="*/*" style="display:none;" />
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;" />
+                </div>
+                <div class="input-row">
+                    <textarea id="messageInput" rows="1" placeholder="输入消息..."></textarea>
+                    <button class="btn-send" id="sendBtn">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
 </html>
