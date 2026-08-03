@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>用户信息同步</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #0a0a1a;
+            color: #e8e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #2a2a45;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .icon { font-size: 56px; margin-bottom: 16px; }
+        h2 { font-size: 22px; margin-bottom: 8px; color: #e8e8f0; }
+        p { color: #8a8aaa; font-size: 14px; margin-bottom: 20px; }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2a2a45;
+            border-top-color: #4a6cf7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .user-card {
+            background: #222240;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 16px 0;
+            text-align: left;
+        }
+        .user-card .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #2a2a45;
+            font-size: 14px;
+        }
+        .user-card .row:last-child { border-bottom: none; }
+        .user-card .label { color: #8a8aaa; }
+        .user-card .value { color: #e8e8f0; font-weight: 500; word-break: break-all; }
+        .btn {
+            display: inline-block;
+            padding: 12px 32px;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            margin: 4px;
+        }
+        .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .btn-primary { background: #4a6cf7; }
+        .btn-secondary { background: #2a2a4a; }
+        .btn-success { background: #22c55e; }
+        .hidden { display: none; }
+        .error { color: #ef4444; background: #2d1a1a; padding: 12px; border-radius: 8px; margin: 12px 0; }
+        .success { color: #22c55e; background: #1a2d1a; padding: 12px; border-radius: 8px; margin: 12px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="icon">🔗</div>
+    <h2>用户信息同步</h2>
+    <p id="statusText">正在获取用户信息...</p>
+
+    <div id="loadingState">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div id="resultArea" class="hidden">
+        <div id="messageBox"></div>
+        <div id="userCard" class="user-card hidden">
+            <div class="row"><span class="label">🆔 用户ID</span><span class="value" id="userId">-</span></div>
+            <div class="row"><span class="label">👤 用户名</span><span class="value" id="userName">-</span></div>
+            <div class="row"><span class="label">📧 邮箱</span><span class="value" id="userEmail">-</span></div>
+        </div>
+        <div style="margin-top: 16px;">
+            <button class="btn btn-success" id="syncToChatBtn">💬 同步到聊天</button>
+            <button class="btn btn-secondary" id="retryBtn">🔄 重新获取</button>
+            <button class="btn btn-secondary" id="backBtn">🏠 返回首页</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============================================================
+    // 配置
+    // ============================================================
+    const CHAT_URL = window.location.origin + '/chat/index.html';
+    const USER_URL = window.location.origin + '/user.html';
+
+    // ============================================================
+    // DOM 引用
+    // ============================================================
+    const statusText = document.getElementById('statusText');
+    const loadingState = document.getElementById('loadingState');
+    const resultArea = document.getElementById('resultArea');
+    const messageBox = document.getElementById('messageBox');
+    const userCard = document.getElementById('userCard');
+    const userIdEl = document.getElementById('userId');
+    const userNameEl = document.getElementById('userName');
+    const userEmailEl = document.getElementById('userEmail');
+    const syncBtn = document.getElementById('syncToChatBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const backBtn = document.getElementById('backBtn');
+
+    let userData = null;
+
+    // ============================================================
+    // Cookie 工具
+    // ============================================================
+    const CookieHelper = {
+        set: function(name, value, days) {
+            const expires = days ? '; expires=' + new Date(Date.now() + days * 86400000).toUTCString() : '';
+            document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+        },
+        get: function(name) {
+            const value = '; ' + document.cookie;
+            const parts = value.split('; ' + name + '=');
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+    };
+
+    // ============================================================
+    // 从 URL 参数获取用户数据
+    // ============================================================
+    function getUserFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const userParam = params.get('user');
+        
+        if (userParam) {
+            try {
+                // URL 解码并解析 JSON
+                const data = JSON.parse(decodeURIComponent(userParam));
+                if (data && data.id) {
+                    return data;
+                }
+            } catch (e) {
+                console.error('解析用户数据失败:', e);
+            }
+        }
+        return null;
+    }
+
+    // ============================================================
+    // 显示用户信息
+    // ============================================================
+    function displayUser(user) {
+        userData = user;
+        userIdEl.textContent = user.id || '-';
+        userNameEl.textContent = user.username || user.display_name || '-';
+        userEmailEl.textContent = user.email || '-';
+        userCard.classList.remove('hidden');
+
+        statusText.textContent = '✅ 已获取用户信息';
+        statusText.style.color = '#22c55e';
+        loadingState.classList.add('hidden');
+        resultArea.classList.remove('hidden');
+        
+        showSuccess('用户信息获取成功！');
+    }
+
+    function showError(message) {
+        statusText.textContent = '❌ 获取失败';
+        statusText.style.color = '#ef4444';
+        loadingState.classList.add('hidden');
+        resultArea.classList.remove('hidden');
+        messageBox.className = 'error';
+        messageBox.textContent = '❌ ' + message;
+        messageBox.style.display = 'block';
+    }
+
+    function showSuccess(message) {
+        messageBox.className = 'success';
+        messageBox.textContent = '✅ ' + message;
+        messageBox.style.display = 'block';
+    }
+
+    function hideMessage() {
+        messageBox.style.display = 'none';
+    }
+
+    // ============================================================
+    // 同步到聊天应用
+    // ============================================================
+    function syncToChat() {
+        if (!userData) {
+            showError('没有用户数据可同步');
+            return;
+        }
+
+        try {
+            // 保存到 localStorage
+            localStorage.setItem('chat_user_data', JSON.stringify(userData));
+            if (userData.token) {
+                localStorage.setItem('auth_token', userData.token);
+            }
+
+            // 保存到 sessionStorage
+            sessionStorage.setItem('user_data', JSON.stringify(userData));
+            if (userData.token) {
+                sessionStorage.setItem('auth_token', userData.token);
+            }
+
+            // 保存到 Cookie
+            CookieHelper.set('user_data', JSON.stringify(userData), 7);
+            if (userData.token) {
+                CookieHelper.set('auth_token', userData.token, 7);
+            }
+
+            // 触发跨标签页事件
+            localStorage.setItem('chat_auth_trigger', Date.now().toString());
+
+            showSuccess('✅ 用户信息已同步到聊天应用！');
+
+            // 1.5秒后跳转到聊天
+            setTimeout(() => {
+                window.location.href = CHAT_URL;
+            }, 1500);
+
+        } catch (error) {
+            showError('同步失败: ' + error.message);
+        }
+    }
+
+    // ============================================================
+    // 跳转到 user.html 登录
+    // ============================================================
+    function goToLogin() {
+        // 跳转到 user.html，并带上当前页面作为回跳地址
+        window.location.href = USER_URL + '?redirect=' + encodeURIComponent(window.location.href);
+    }
+
+    // ============================================================
+    // 初始化 - 从 URL 获取用户数据
+    // ============================================================
+    function init() {
+        console.log('📋 当前 URL:', window.location.href);
+        console.log('📋 解析参数:', new URLSearchParams(window.location.search).toString());
+
+        // 从 URL 获取用户数据
+        const user = getUserFromURL();
+        
+        if (user) {
+            console.log('✅ 从 URL 获取到用户数据:', user);
+            displayUser(user);
+            
+            // 自动同步到聊天
+            setTimeout(() => syncToChat(), 500);
+        } else {
+            console.log('❌ URL 中没有用户数据');
+            showError('未找到用户信息，请先登录');
+            
+            // 添加"去登录"按钮
+            const btnContainer = document.querySelector('#resultArea > div:last-child');
+            
+            // 清除旧的额外按钮
+            const oldBtns = btnContainer.querySelectorAll('.extra-btn');
+            oldBtns.forEach(el => el.remove());
+            
+            const loginBtn = document.createElement('button');
+            loginBtn.className = 'btn btn-primary extra-btn';
+            loginBtn.textContent = '🔑 去 user.html 登录';
+            loginBtn.onclick = goToLogin;
+            btnContainer.appendChild(loginBtn);
+        }
+    }
+
+    // ============================================================
+    // 事件绑定
+    // ============================================================
+    syncBtn.addEventListener('click', syncToChat);
+
+    retryBtn.addEventListener('click', function() {
+        hideMessage();
+        loadingState.classList.remove('hidden');
+        resultArea.classList.add('hidden');
+        statusText.textContent = '正在重新获取...';
+        statusText.style.color = '#8a8aaa';
+        
+        userData = null;
+        setTimeout(init, 500);
+    });
+
+    backBtn.addEventListener('click', function() {
+        window.location.href = window.location.origin + '/index.html';
+    });
+
+    // ============================================================
+    // 启动
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', init);
+
+    console.log('🔄 用户同步中介已启动');
+    console.log('📋 来源页面:', document.referrer || '直接访问');
+</script>
+
+</body>
+</html>
