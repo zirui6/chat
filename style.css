@@ -956,3 +956,172 @@ body {
         padding: 16px 20px;
     }
 }
+
+/* ============================================================
+   新增样式
+   ============================================================ */
+
+/* 侧边栏操作按钮 */
+.sidebar-action-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sidebar-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 设置页面 */
+.settings-content {
+    padding: 12px 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.settings-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-item:hover {
+    background: var(--bg-hover);
+}
+
+.settings-icon {
+    font-size: 22px;
+    width: 36px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.settings-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.settings-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.settings-arrow {
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+.settings-footer {
+    padding: 16px;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* 侧边栏切换动画 */
+#sidebarChat, #sidebarFriends, #sidebarSettings {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+#sidebarChat .chat-list,
+#sidebarFriends .chat-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* 空状态在侧边栏 */
+.sidebar-empty {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--text-muted);
+}
+
+.sidebar-empty .icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+}
+
+/* 好友列表项 */
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-left: 3px solid transparent;
+}
+
+.friend-item:hover {
+    background: var(--bg-hover);
+}
+
+.friend-item .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.friend-item .info {
+    flex: 1;
+    min-width: 0;
+}
+
+.friend-item .info .name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.friend-item .info .status {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.friend-item .action-btn {
+    padding: 4px 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .settings-item {
+        padding: 10px 14px;
+    }
+    .settings-icon {
+        font-size: 18px;
+        width: 30px;
+    }
+}
