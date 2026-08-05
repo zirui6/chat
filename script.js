@@ -532,11 +532,8 @@ function selectChat(chat) {
     if (chatInput) chatInput.style.display = 'block';
 
     const name = chat.display_name || chat.username || '用户';
-    const avatar = chat.avatar_url || 'https://zirui6.github.io/touxiang.jpg';
-    const chatAvatar = $('chatAvatar');
     const chatName = $('chatName');
     const chatStatus = $('chatStatus');
-    if (chatAvatar) chatAvatar.src = avatar;
     if (chatName) chatName.textContent = name;
     if (chatStatus) chatStatus.textContent = '在线';
 
