@@ -11,9 +11,6 @@ const CONFIG = {
     WEBSITE: 'https://zirui6.github.io',
 };
 
-// ============================================================
-// Airtable 配置
-// ============================================================
 const AIRTABLE_CONFIG = {
     API_TOKEN: 'patdZcEB92LMLW3bQ.44a613d94083deff3df9f4fda69a7b7a6c851c56faf900b16c72c6ddff7021ea',
     BASE_ID: 'app9G6YeDcFq7g09r',
@@ -28,58 +25,33 @@ const $ = (id) => document.getElementById(id);
 // ============================================================
 // 禁用右键和快捷键
 // ============================================================
-document.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-    return false;
-});
-
+document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
 document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
-        e.preventDefault();
-        return false;
-    }
-    if (e.ctrlKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
-        e.preventDefault();
-        return false;
-    }
-    if (e.ctrlKey && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
-        e.preventDefault();
-        return false;
-    }
-    if (e.key === 'F12') {
-        e.preventDefault();
-        return false;
-    }
+    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); return false; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) { e.preventDefault(); return false; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); return false; }
+    if (e.key === 'F12') { e.preventDefault(); return false; }
 });
 
 // ============================================================
 // Toast
 // ============================================================
 let toastTimer = null;
-
 function showToast(message, type = 'info') {
     const el = $('toast');
     if (!el) return;
     el.textContent = message;
     el.className = 'toast ' + type + ' show';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-        el.classList.remove('show');
-    }, 3000);
+    toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3000);
 }
 
 // ============================================================
 // 工具函数
 // ============================================================
 function getLocalUser() {
-    try {
-        const data = localStorage.getItem('chat_user_data');
-        if (data) return JSON.parse(data);
-    } catch (e) {}
-    try {
-        const data = sessionStorage.getItem('user_data');
-        if (data) return JSON.parse(data);
-    } catch (e) {}
+    try { const data = localStorage.getItem('chat_user_data'); if (data) return JSON.parse(data); } catch (e) {}
+    try { const data = sessionStorage.getItem('user_data'); if (data) return JSON.parse(data); } catch (e) {}
     return null;
 }
 
@@ -105,38 +77,23 @@ function getInitials(name) {
 // ============================================================
 function getUnreadCount(chatId) {
     const key = 'chat_unread_' + chatId;
-    try {
-        const data = localStorage.getItem(key);
-        return data ? parseInt(data) : 0;
-    } catch (e) {
-        return 0;
-    }
+    try { const data = localStorage.getItem(key); return data ? parseInt(data) : 0; } catch (e) { return 0; }
 }
-
 function setUnreadCount(chatId, count) {
     const key = 'chat_unread_' + chatId;
-    try {
-        if (count > 0) {
-            localStorage.setItem(key, String(count));
-        } else {
-            localStorage.removeItem(key);
-        }
-    } catch (e) {}
+    try { if (count > 0) { localStorage.setItem(key, String(count)); } else { localStorage.removeItem(key); } } catch (e) {}
 }
-
 function incrementUnread(chatId) {
     if (chatId === 'system' || chatId === 'public' || chatId === '-1') return;
     const current = getUnreadCount(chatId);
     setUnreadCount(chatId, current + 1);
     updateTotalBadge();
 }
-
 function clearUnread(chatId) {
     if (chatId === 'system') return;
     setUnreadCount(chatId, 0);
     updateTotalBadge();
 }
-
 function updateTotalBadge() {
     let total = 0;
     chatList.forEach(chat => {
@@ -144,7 +101,6 @@ function updateTotalBadge() {
             total += getUnreadCount(chat.id);
         }
     });
-    
     const badge = $('totalBadge');
     if (badge) {
         if (total > 0) {
@@ -178,9 +134,7 @@ async function updateUserStatus(status) {
                 updated_at: new Date().toISOString()
             })
         });
-    } catch (error) {
-        console.error('更新状态失败:', error);
-    }
+    } catch (error) { console.error('更新状态失败:', error); }
 }
 
 async function getUsersStatus(userIds) {
@@ -189,28 +143,16 @@ async function getUsersStatus(userIds) {
         const ids = userIds.join(',');
         const response = await fetch(
             CONFIG.SUPABASE_URL + `/rest/v1/user_status?user_id=in.(${ids})&select=user_id,status,last_seen`,
-            {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
-                }
-            }
+            { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
         );
         if (response.ok) {
             const data = await response.json();
             const result = {};
-            data.forEach(item => {
-                result[item.user_id] = {
-                    status: item.status || 'offline',
-                    last_seen: item.last_seen
-                };
-            });
+            data.forEach(item => { result[item.user_id] = { status: item.status || 'offline', last_seen: item.last_seen }; });
             return result;
         }
         return {};
-    } catch (error) {
-        return {};
-    }
+    } catch (error) { return {}; }
 }
 
 // ============================================================
@@ -219,7 +161,6 @@ async function getUsersStatus(userIds) {
 function goToLogin() {
     window.location.href = CONFIG.WEBSITE + '/user.html?redirect=' + encodeURIComponent(window.location.href);
 }
-
 function goToTest() {
     window.location.href = 'test.html';
 }
@@ -229,9 +170,6 @@ let isLoggedIn = false;
 let pollingInterval = null;
 let lastMessageId = {};
 
-// ============================================================
-// 检查登录状态
-// ============================================================
 function checkLoginStatus() {
     const user = getLocalUser();
     if (user && user.id) {
@@ -256,9 +194,7 @@ function checkLoginStatus() {
 function updateUIForLoggedIn() {
     if (!currentUser) return;
     const avatar = $('myAvatar');
-    if (avatar) {
-        avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg';
-    }
+    if (avatar) { avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg'; }
     updateUserStatus('online');
     loadChats();
     startPolling();
@@ -267,12 +203,7 @@ function updateUIForLoggedIn() {
 function updateUIForGuest() {
     const list = $('chatList');
     if (list) {
-        list.innerHTML = `
-            <div style="text-align:center;padding:40px 0;color:#666688;">
-                <div style="font-size:40px;margin-bottom:12px;">🔒</div>
-                <p>请先登录</p>
-            </div>
-        `;
+        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">🔒</div><p>请先登录</p></div>`;
     }
     const chatInput = $('chatInput');
     const chatHeader = $('chatHeader');
@@ -292,30 +223,9 @@ let currentChat = null;
 let chatList = [];
 
 const DEFAULT_CONTACTS = [
-    {
-        id: 'system',
-        username: '系统服务',
-        display_name: '📢 系统公告',
-        avatar_url: 'https://zirui6.github.io/icon48.png',
-        is_default: true,
-        type: 'system'
-    },
-    {
-        id: 'public',
-        username: '公共频道',
-        display_name: '🌐 公共频道',
-        avatar_url: 'https://zirui6.github.io/icon48.png',
-        is_default: true,
-        type: 'public'
-    },
-    {
-        id: '-1',
-        username: '文件传输助手',
-        display_name: '📎 文件传输助手',
-        avatar_url: 'https://zirui6.github.io/icon48.png',
-        is_default: true,
-        type: 'self'
-    }
+    { id: 'system', username: '系统服务', display_name: '📢 系统公告', avatar_url: 'https://zirui6.github.io/icon48.png', is_default: true, type: 'system' },
+    { id: 'public', username: '公共频道', display_name: '🌐 公共频道', avatar_url: 'https://zirui6.github.io/icon48.png', is_default: true, type: 'public' },
+    { id: '-1', username: '文件传输助手', display_name: '📎 文件传输助手', avatar_url: 'https://zirui6.github.io/icon48.png', is_default: true, type: 'self' }
 ];
 
 // ============================================================
@@ -325,17 +235,9 @@ async function fetchAirtableData() {
     try {
         const url = `https://api.airtable.com/v0/${AIRTABLE_CONFIG.BASE_ID}/${encodeURIComponent(AIRTABLE_CONFIG.TABLE_NAME)}`;
         const response = await fetch(url, {
-            headers: {
-                'Authorization': 'Bearer ' + AIRTABLE_CONFIG.API_TOKEN,
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Authorization': 'Bearer ' + AIRTABLE_CONFIG.API_TOKEN, 'Content-Type': 'application/json' }
         });
-
-        if (!response.ok) {
-            console.error('Airtable 错误:', response.status);
-            return [];
-        }
-
+        if (!response.ok) { console.error('Airtable 错误:', response.status); return []; }
         const data = await response.json();
         const records = data.records || [];
         return records.map(record => {
@@ -349,10 +251,7 @@ async function fetchAirtableData() {
                 imageUrl: fields['附图链接'] || '',
             };
         }).sort((a, b) => new Date(b.publishDate) - new Date(a.publishDate));
-    } catch (error) {
-        console.error('Airtable 错误:', error);
-        return [];
-    }
+    } catch (error) { console.error('Airtable 错误:', error); return []; }
 }
 
 async function loadSystemMessages() {
@@ -372,9 +271,7 @@ async function loadSystemMessages() {
             is_article: true,
             _raw: item
         }));
-    } catch (error) {
-        return [];
-    }
+    } catch (error) { return []; }
 }
 
 // ============================================================
@@ -382,13 +279,9 @@ async function loadSystemMessages() {
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
-
     try {
         const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=200', {
-            headers: {
-                'apikey': CONFIG.SUPABASE_ANON_KEY,
-                'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
-            }
+            headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY }
         });
 
         let userChats = [];
@@ -401,14 +294,12 @@ async function loadChats() {
                 if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
                 return false;
             });
-
             const grouped = {};
             filtered.forEach(msg => {
                 const key = msg.sender_id || 'unknown';
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(msg);
             });
-
             userChats = Object.keys(grouped).map(senderId => {
                 const msgs = grouped[senderId];
                 const lastMsg = msgs[0];
@@ -432,13 +323,8 @@ async function loadChats() {
 
         if (chatList.length > 0) {
             const systemChat = chatList.find(c => c.id === 'system');
-            if (systemChat) {
-                selectChat(systemChat);
-            } else {
-                selectChat(chatList[0]);
-            }
+            if (systemChat) { selectChat(systemChat); } else { selectChat(chatList[0]); }
         }
-
     } catch (error) {
         console.error('加载聊天失败:', error);
         chatList = DEFAULT_CONTACTS;
@@ -448,26 +334,18 @@ async function loadChats() {
 }
 
 // ============================================================
-// 渲染聊天列表（含未读红点和在线状态）
+// 渲染聊天列表
 // ============================================================
 function renderChatList() {
     const list = $('chatList');
     if (!list) return;
 
     if (chatList.length === 0) {
-        list.innerHTML = `
-            <div style="text-align:center;padding:40px 0;color:#666688;">
-                <div style="font-size:40px;margin-bottom:12px;">👥</div>
-                <p>暂无聊天</p>
-            </div>
-        `;
+        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>暂无聊天</p></div>`;
         return;
     }
 
-    const userIds = chatList
-        .filter(c => c.type === 'friend' || c.type === 'public')
-        .map(c => c.id)
-        .filter(id => id && id !== 'system' && id !== 'public' && id !== '-1');
+    const userIds = chatList.filter(c => c.type === 'friend' || c.type === 'public').map(c => c.id).filter(id => id && id !== 'system' && id !== 'public' && id !== '-1');
 
     getUsersStatus(userIds).then(statusMap => {
         list.innerHTML = chatList.map(chat => {
@@ -477,22 +355,15 @@ function renderChatList() {
             const lastMsg = chat.last_message || '暂无消息';
             const time = chat.last_time ? formatTime(chat.last_time) : '';
             const unread = chat.id !== 'system' ? getUnreadCount(chat.id) : 0;
-            
             let statusDot = '';
             if (chat.type === 'friend' && chat.id !== '-1') {
                 const status = statusMap[chat.id];
-                statusDot = status && status.status === 'online' 
-                    ? '<span class="status-dot-online"></span>' 
-                    : '<span class="status-dot-offline"></span>';
+                statusDot = status && status.status === 'online' ? '<span class="status-dot-online"></span>' : '<span class="status-dot-offline"></span>';
             }
-
             return `
-                <div class="chat-item ${active ? 'active' : ''}" 
-                     data-id="${chat.id}"
-                     onclick="selectChatById('${chat.id}')">
+                <div class="chat-item ${active ? 'active' : ''}" data-id="${chat.id}" onclick="selectChatById('${chat.id}')">
                     <div class="avatar-wrapper">
-                        <img src="${avatar}" class="avatar" alt="" 
-                             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                        <img src="${avatar}" class="avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
                         <div class="avatar default" style="display:none;">${getInitials(name)}</div>
                         ${statusDot}
                     </div>
@@ -517,11 +388,9 @@ function renderChatList() {
 function selectChat(chat) {
     if (!chat) return;
     currentChat = chat;
-    
-    if (chat.type !== 'system') {
-        clearUnread(chat.id);
-    }
-    
+
+    if (chat.type !== 'system') { clearUnread(chat.id); }
+
     renderChatList();
 
     const emptyState = $('emptyState');
@@ -561,11 +430,8 @@ function selectChatById(id) {
 async function loadSystemChat() {
     const list = $('messageList');
     if (!list) return;
-
     list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载公告中...</div>';
-
     const items = await loadSystemMessages();
-    
     if (items.length === 0) {
         list.innerHTML = `
             <div style="text-align:center;padding:40px 0;color:#666688;">
@@ -577,7 +443,6 @@ async function loadSystemChat() {
         `;
         return;
     }
-
     messages = items;
     renderMessages();
 }
@@ -587,36 +452,22 @@ async function loadSystemChat() {
 // ============================================================
 function loadLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
-    try {
-        const data = localStorage.getItem(key);
-        messages = data ? JSON.parse(data) : [];
-        renderMessages();
-    } catch (e) {
-        messages = [];
-    }
+    try { const data = localStorage.getItem(key); messages = data ? JSON.parse(data) : []; renderMessages(); } catch (e) { messages = []; }
 }
-
 function saveLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
-    try {
-        localStorage.setItem(key, JSON.stringify(messages));
-    } catch (e) {}
+    try { localStorage.setItem(key, JSON.stringify(messages)); } catch (e) {}
 }
 
 // ============================================================
-// 渲染消息
+// 渲染消息（无头像）
 // ============================================================
 function renderMessages() {
     const list = $('messageList');
     if (!list) return;
 
-    if (messages.length === 0) {
-        list.innerHTML = `
-            <div style="text-align:center;padding:40px 0;color:#666688;">
-                <p>暂无消息</p>
-                <p style="font-size:12px;">开始聊天吧</p>
-            </div>
-        `;
+    if (!messages || messages.length === 0) {
+        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><p>暂无消息</p><p style="font-size:12px;">开始聊天吧</p></div>`;
         return;
     }
 
@@ -626,16 +477,10 @@ function renderMessages() {
             html += renderArticleMessage(msg);
             return;
         }
-
         const isSent = msg.sender_id === currentUser?.id;
-        const avatar = isSent 
-            ? (currentUser?.avatar_url || 'https://zirui6.github.io/touxiang.jpg')
-            : (currentChat?.avatar_url || 'https://zirui6.github.io/touxiang.jpg');
         const time = formatTime(msg.created_at);
-
         html += `
             <div class="message ${isSent ? 'sent' : 'received'}">
-                <img src="${avatar}" class="msg-avatar" alt="" />
                 <div>
                     <div class="msg-bubble">${msg.content || ''}</div>
                     <div class="msg-time">${time}</div>
@@ -653,14 +498,9 @@ function renderMessages() {
 // ============================================================
 function renderArticleMessage(msg) {
     const time = formatTime(msg.publish_date || msg.created_at);
-    const imageHtml = msg.image_url ? 
-        `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')">
-            <img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" />
-        </div>` : '';
-
+    const imageHtml = msg.image_url ? `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')"><img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" /></div>` : '';
     return `
         <div class="message received article-message">
-            <div class="msg-avatar system-avatar">📢</div>
             <div>
                 <div class="msg-bubble article-bubble">
                     <div class="article-publisher">📢 ${msg.publisher || '系统服务'}</div>
@@ -682,27 +522,14 @@ async function sendMessage() {
     const content = input.value.trim();
 
     if (!content) return;
-    if (!currentChat) {
-        showToast('请先选择聊天', 'warning');
-        return;
-    }
-    if (!currentUser) {
-        showToast('请先登录', 'error');
-        return;
-    }
-    if (currentChat.type === 'system') {
-        showToast('⚠️ 系统公告频道不能发送消息', 'warning');
-        return;
-    }
+    if (!currentChat) { showToast('请先选择聊天', 'warning'); return; }
+    if (!currentUser) { showToast('请先登录', 'error'); return; }
+    if (currentChat.type === 'system') { showToast('⚠️ 系统公告频道不能发送消息', 'warning'); return; }
 
     let receiverId = null;
-    if (currentChat.type === 'public' || currentChat.id === 'public') {
-        receiverId = null;
-    } else if (currentChat.id === '-1') {
-        receiverId = '-1';
-    } else {
-        receiverId = currentChat.id;
-    }
+    if (currentChat.type === 'public' || currentChat.id === 'public') { receiverId = null; }
+    else if (currentChat.id === '-1') { receiverId = '-1'; }
+    else { receiverId = currentChat.id; }
 
     const msgData = {
         content: content,
@@ -712,10 +539,7 @@ async function sendMessage() {
         created_at: new Date().toISOString()
     };
 
-    const localMsg = {
-        ...msgData,
-        id: Date.now()
-    };
+    const localMsg = { ...msgData, id: Date.now() };
     messages.push(localMsg);
     saveLocalMessages(currentChat.id);
     renderMessages();
@@ -742,36 +566,23 @@ async function sendMessage() {
             },
             body: JSON.stringify(msgData)
         });
-
-        if (response.ok) {
-            console.log('✅ 消息已保存');
-            showToast('✅ 消息已发送', 'success');
-        } else {
-            showToast('⚠️ 本地已保存，云端同步失败', 'error');
-        }
-    } catch (error) {
-        showToast('⚠️ 本地已保存，云端同步失败', 'error');
-    }
+        if (response.ok) { console.log('✅ 消息已保存'); showToast('✅ 消息已发送', 'success'); }
+        else { showToast('⚠️ 本地已保存，云端同步失败', 'error'); }
+    } catch (error) { showToast('⚠️ 本地已保存，云端同步失败', 'error'); }
 }
 
 // ============================================================
-// 轮询（自动刷新 + 未读计数）
+// 轮询
 // ============================================================
 function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
-
     pollingInterval = setInterval(async () => {
         if (!isLoggedIn) return;
         if (currentChat && (currentChat.type === 'system' || currentChat.id === 'system')) return;
-        
         try {
             const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=50', {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
-                }
+                headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY }
             });
-
             if (response.ok) {
                 const data = await response.json();
                 const filtered = data.filter(msg => {
@@ -781,49 +592,26 @@ function startPolling() {
                     if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
                     return false;
                 });
-
                 if (filtered.length > 0) {
                     const latest = filtered[0];
-                    
-                    // 检查是否有新消息
                     const lastKey = currentChat ? currentChat.id : 'none';
                     const lastId = lastMessageId[lastKey] || 0;
-                    
                     if (latest.id !== lastId) {
-                        // 有新消息
                         const newMsgs = filtered.filter(m => m.id > lastId);
-                        
-                        // 如果是当前聊天，刷新消息
                         if (currentChat) {
-                            const isCurrent = newMsgs.some(m => 
-                                m.sender_id === currentChat.id || m.receiver_id === currentChat.id
-                            );
-                            if (isCurrent) {
-                                loadLocalMessages(currentChat.id);
-                            } else {
-                                // 不是当前聊天，增加未读
-                                newMsgs.forEach(m => {
-                                    if (m.sender_id !== currentUser.id) {
-                                        incrementUnread(m.sender_id);
-                                    }
-                                });
+                            const isCurrent = newMsgs.some(m => m.sender_id === currentChat.id || m.receiver_id === currentChat.id);
+                            if (isCurrent) { loadLocalMessages(currentChat.id); }
+                            else {
+                                newMsgs.forEach(m => { if (m.sender_id !== currentUser.id) { incrementUnread(m.sender_id); } });
                             }
                         } else {
-                            // 没有当前聊天，增加未读
-                            newMsgs.forEach(m => {
-                                if (m.sender_id !== currentUser.id) {
-                                    incrementUnread(m.sender_id);
-                                }
-                            });
+                            newMsgs.forEach(m => { if (m.sender_id !== currentUser.id) { incrementUnread(m.sender_id); } });
                         }
-                        
                         lastMessageId[lastKey] = latest.id;
                     }
                 }
             }
-        } catch (error) {
-            console.error('轮询错误:', error);
-        }
+        } catch (error) { console.error('轮询错误:', error); }
     }, 5000);
 }
 
@@ -832,9 +620,7 @@ function startPolling() {
 // ============================================================
 function scrollToBottom() {
     const list = $('messageList');
-    setTimeout(() => {
-        if (list) list.scrollTop = list.scrollHeight;
-    }, 50);
+    setTimeout(() => { if (list) list.scrollTop = list.scrollHeight; }, 50);
 }
 
 // ============================================================
@@ -846,10 +632,7 @@ function getUserFromURL() {
     if (userParam) {
         try {
             const data = JSON.parse(decodeURIComponent(userParam));
-            if (data && data.id) {
-                localStorage.setItem('chat_user_data', JSON.stringify(data));
-                return data;
-            }
+            if (data && data.id) { localStorage.setItem('chat_user_data', JSON.stringify(data)); return data; }
         } catch (e) {}
     }
     return null;
@@ -859,16 +642,12 @@ function getUserFromURL() {
 // 切换标签页
 // ============================================================
 function switchTab(tab) {
-    document.querySelectorAll('.func-item[data-tab]').forEach(btn => {
-        btn.classList.remove('active');
-    });
+    document.querySelectorAll('.func-item[data-tab]').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
     if (activeBtn) activeBtn.classList.add('active');
-
     const sidebarChat = $('sidebarChat');
     const sidebarFriends = $('sidebarFriends');
     const sidebarSettings = $('sidebarSettings');
-
     if (sidebarChat) sidebarChat.style.display = tab === 'chat' ? 'flex' : 'none';
     if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
     if (sidebarSettings) sidebarSettings.style.display = tab === 'settings' ? 'flex' : 'none';
@@ -877,11 +656,7 @@ function switchTab(tab) {
 function openSettings() { switchTab('settings'); }
 function openTest() { window.open('test.html', '_blank'); }
 
-function openAddFriend() {
-    $('addFriendModal').classList.add('show');
-    $('addFriendInput').focus();
-}
-
+function openAddFriend() { $('addFriendModal').classList.add('show'); $('addFriendInput').focus(); }
 function closeAddFriend() {
     $('addFriendModal').classList.remove('show');
     $('addFriendInput').value = '';
@@ -892,22 +667,13 @@ function closeAddFriend() {
 function loadFriendList() {
     const list = $('friendList');
     if (!list) return;
-    list.innerHTML = `
-        <div style="text-align:center;padding:40px 0;color:#666688;">
-            <div style="font-size:40px;margin-bottom:12px;">👥</div>
-            <p>好友功能开发中</p>
-            <p style="font-size:12px;">点击 ➕ 添加好友</p>
-        </div>
-    `;
+    list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>好友功能开发中</p><p style="font-size:12px;">点击 ➕ 添加好友</p></div>`;
 }
 
 function searchAndAddFriend() {
     const input = $('addFriendInput');
     const keyword = input.value.trim();
-    if (!keyword) {
-        showToast('请输入用户ID或用户名', 'warning');
-        return;
-    }
+    if (!keyword) { showToast('请输入用户ID或用户名', 'warning'); return; }
     showToast('🔍 搜索功能开发中', 'info');
 }
 
@@ -915,14 +681,10 @@ function clearAllData() {
     if (confirm('确定要清除所有本地缓存数据吗？')) {
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-            if (key.startsWith('chat_messages_') || key.startsWith('chat_unread_')) {
-                localStorage.removeItem(key);
-            }
+            if (key.startsWith('chat_messages_') || key.startsWith('chat_unread_')) { localStorage.removeItem(key); }
         });
         showToast('✅ 缓存已清除', 'success');
-        if (currentChat) {
-            loadLocalMessages(currentChat.id);
-        }
+        if (currentChat) { loadLocalMessages(currentChat.id); }
         updateTotalBadge();
     }
 }
@@ -935,10 +697,7 @@ function logout() {
         sessionStorage.clear();
         isLoggedIn = false;
         currentUser = null;
-        if (pollingInterval) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-        }
+        if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
         $('loginOverlay').classList.add('show');
         updateUIForGuest();
         showToast('已退出登录', 'info');
@@ -949,22 +708,15 @@ function openQR() {
     const modal = $('qrModal');
     const userIdEl = $('qrUserId');
     if (modal) modal.classList.add('show');
-    if (userIdEl && currentUser) {
-        userIdEl.textContent = currentUser.id || '-';
-    }
+    if (userIdEl && currentUser) { userIdEl.textContent = currentUser.id || '-'; }
 }
-
-function closeQR() {
-    $('qrModal').classList.remove('show');
-}
+function closeQR() { $('qrModal').classList.remove('show'); }
 
 function copyUserId() {
     if (currentUser && currentUser.id) {
         const id = String(currentUser.id);
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(id).then(() => {
-                showToast('✅ 用户ID已复制', 'success');
-            });
+            navigator.clipboard.writeText(id).then(() => { showToast('✅ 用户ID已复制', 'success'); });
         } else {
             const input = document.createElement('input');
             input.value = id;
@@ -985,20 +737,12 @@ let uiMode = 'auto';
 
 function detectDevice() {
     const width = window.innerWidth;
-    if (width <= 480) {
-        deviceType = 'mobile';
-    } else if (width <= 1024) {
-        deviceType = 'tablet';
-    } else {
-        deviceType = 'desktop';
-    }
+    if (width <= 480) { deviceType = 'mobile'; }
+    else if (width <= 1024) { deviceType = 'tablet'; }
+    else { deviceType = 'desktop'; }
     const deviceInfo = $('deviceInfo');
     if (deviceInfo) {
-        const icons = {
-            'mobile': '📱 手机',
-            'tablet': '📱 平板',
-            'desktop': '🖥️ 桌面'
-        };
+        const icons = { 'mobile': '📱 手机', 'tablet': '📱 平板', 'desktop': '🖥️ 桌面' };
         deviceInfo.textContent = icons[deviceType] || '🖥️ 桌面';
     }
     applyUIMode();
@@ -1010,24 +754,16 @@ function applyUIMode() {
     if (!app) return;
     const mode = uiMode === 'auto' ? getAutoMode() : uiMode;
     app.classList.remove('wechat-style');
-    if (mode === 'wechat') {
-        app.classList.add('wechat-style');
-    }
+    if (mode === 'wechat') { app.classList.add('wechat-style'); }
     const statusEl = $('uiModeStatus');
     if (statusEl) {
-        const labels = {
-            'auto': '自动 (' + getAutoMode() + ')',
-            'default': '默认',
-            'wechat': '微信风格'
-        };
+        const labels = { 'auto': '自动 (' + getAutoMode() + ')', 'default': '默认', 'wechat': '微信风格' };
         statusEl.textContent = labels[mode] || '自动';
     }
 }
 
 function getAutoMode() {
-    if (deviceType === 'mobile' || deviceType === 'tablet') {
-        return 'wechat';
-    }
+    if (deviceType === 'mobile' || deviceType === 'tablet') { return 'wechat'; }
     return 'default';
 }
 
@@ -1043,52 +779,40 @@ function toggleUIMode() {
 
 function loadUIMode() {
     const saved = localStorage.getItem('ui_mode');
-    if (saved && ['auto', 'default', 'wechat'].includes(saved)) {
-        uiMode = saved;
-    } else {
-        uiMode = 'auto';
-    }
+    if (saved && ['auto', 'default', 'wechat'].includes(saved)) { uiMode = saved; }
+    else { uiMode = 'auto'; }
 }
 
 function toggleTheme() {
     const html = document.documentElement;
-    const current = html.getAttribute('data-theme') || 'dark';
+    const current = html.getAttribute('data-theme') || 'light';
     const next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     const statusEl = $('themeStatus');
-    if (statusEl) {
-        statusEl.textContent = next === 'dark' ? '深色模式' : '浅色模式';
-    }
+    if (statusEl) { statusEl.textContent = next === 'dark' ? '深色模式' : '浅色模式'; }
     showToast(next === 'dark' ? '🌙 深色模式' : '☀️ 浅色模式', 'info');
 }
 
 function loadTheme() {
-    const saved = localStorage.getItem('theme') || 'dark';
+    const saved = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     const statusEl = $('themeStatus');
-    if (statusEl) {
-        statusEl.textContent = saved === 'dark' ? '深色模式' : '浅色模式';
-    }
+    if (statusEl) { statusEl.textContent = saved === 'dark' ? '深色模式' : '浅色模式'; }
 }
 
 // ============================================================
 // 页面可见性监听
 // ============================================================
 document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-        updateUserStatus('offline');
-    } else {
+    if (document.hidden) { updateUserStatus('offline'); }
+    else {
         updateUserStatus('online');
-        if (isLoggedIn && currentChat) {
-            loadLocalMessages(currentChat.id);
-        }
+        if (isLoggedIn && currentChat) { loadLocalMessages(currentChat.id); }
     }
 });
 
-window.addEventListener('beforeunload', function() {
-    updateUserStatus('offline');
-});
+window.addEventListener('beforeunload', function() { updateUserStatus('offline'); });
 
 // ============================================================
 // 事件绑定
@@ -1108,13 +832,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const messageInput = $('messageInput');
 
     if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-
     if (messageInput) {
         messageInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         });
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -1123,24 +843,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     $('fileInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
-        }
+        if (this.files.length > 0) { showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info'); }
         this.value = '';
     });
-
     $('imageInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
-        }
+        if (this.files.length > 0) { showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info'); }
         this.value = '';
     });
-
     $('addFriendSubmit')?.addEventListener('click', searchAndAddFriend);
     $('addFriendInput')?.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') searchAndAddFriend();
     });
-
     $('avatarBtn')?.addEventListener('click', openQR);
     $('copyIdBtn')?.addEventListener('click', copyUserId);
 });
