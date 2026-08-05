@@ -1,7 +1,10 @@
 /* ============================================================
-   梓睿聊天 · 样式
+   梓睿聊天 · 样式（完整版）
    ============================================================ */
 
+/* ============================================================
+   CSS 变量
+   ============================================================ */
 :root {
     --bg-body: #0a0a1a;
     --bg-sidebar: #141425;
@@ -29,8 +32,13 @@
     --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
     --funcbar-width: 68px;
     --sidebar-width: 280px;
+    --header-height: 56px;
+    --input-height: 56px;
 }
 
+/* ============================================================
+   浅色主题
+   ============================================================ */
 [data-theme="light"] {
     --bg-body: #e8ecf1;
     --bg-sidebar: #ffffff;
@@ -49,6 +57,9 @@
     --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.1);
 }
 
+/* ============================================================
+   基础样式
+   ============================================================ */
 * {
     margin: 0;
     padding: 0;
@@ -72,6 +83,7 @@ body {
     height: 100vh;
     width: 100vw;
     background: var(--bg-body);
+    transition: background var(--transition);
 }
 
 /* ============================================================
@@ -178,18 +190,50 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    transition: background var(--transition), border-color var(--transition);
+    transition: background var(--transition), border-color var(--transition), transform 0.3s ease;
     overflow: hidden;
+    position: relative;
+    z-index: 5;
 }
 
 .sidebar-header {
-    padding: 12px 16px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);
+    min-height: var(--header-height);
+    flex-shrink: 0;
 }
 
 .sidebar-header .title {
     font-size: 18px;
     font-weight: 700;
+    color: var(--text-primary);
+}
+
+.sidebar-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.sidebar-action-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sidebar-action-btn:hover {
+    background: var(--bg-hover);
     color: var(--text-primary);
 }
 
@@ -199,6 +243,7 @@ body {
     gap: 8px;
     padding: 8px 16px;
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .sidebar-search input {
@@ -222,26 +267,6 @@ body {
     color: var(--text-muted);
 }
 
-.sidebar-search .btn-icon {
-    width: 34px;
-    height: 34px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 20px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.sidebar-search .btn-icon:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
 /* ============================================================
    聊天列表
    ============================================================ */
@@ -249,6 +274,12 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 4px 0;
+}
+
+.loading-placeholder {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--text-muted);
 }
 
 .chat-item {
@@ -344,7 +375,9 @@ body {
     transition: background var(--transition);
 }
 
-/* 空状态 */
+/* ============================================================
+   空状态
+   ============================================================ */
 .empty-state {
     flex: 1;
     display: flex;
@@ -354,7 +387,7 @@ body {
     color: var(--text-muted);
 }
 
-.empty-state .icon {
+.empty-state .empty-icon {
     font-size: 64px;
     margin-bottom: 16px;
 }
@@ -368,7 +401,9 @@ body {
     font-size: 14px;
 }
 
-/* 聊天头部 */
+/* ============================================================
+   聊天头部
+   ============================================================ */
 .chat-header {
     display: flex;
     justify-content: space-between;
@@ -376,13 +411,25 @@ body {
     padding: 10px 20px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-card);
-    min-height: 60px;
+    min-height: var(--header-height);
+    flex-shrink: 0;
+    transition: background var(--transition), border-color var(--transition);
 }
 
-.chat-header .user {
+.chat-header-left {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.btn-back {
+    display: none;
+    font-size: 28px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0 4px;
 }
 
 .chat-header .user img {
@@ -403,7 +450,7 @@ body {
     color: var(--success);
 }
 
-.chat-header .actions {
+.chat-header-right {
     display: flex;
     gap: 4px;
 }
@@ -483,46 +530,6 @@ body {
     text-align: right;
 }
 
-.message .msg-image {
-    max-width: 280px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-}
-
-.message .msg-file {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background: rgba(255,255,255,0.05);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.message .msg-file:hover {
-    background: rgba(255,255,255,0.1);
-}
-
-.message .msg-file .file-icon {
-    font-size: 28px;
-}
-
-.message .msg-file .file-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.message .msg-file .file-info .file-name {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.message .msg-file .file-info .file-size {
-    font-size: 11px;
-    color: var(--text-muted);
-}
-
 /* ============================================================
    输入区
    ============================================================ */
@@ -530,12 +537,34 @@ body {
     border-top: 1px solid var(--border-color);
     background: var(--bg-card);
     padding: 8px 16px;
+    flex-shrink: 0;
+    transition: background var(--transition), border-color var(--transition);
 }
 
 .chat-input .tools {
     display: flex;
     gap: 4px;
     margin-bottom: 6px;
+}
+
+.tool-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tool-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 .chat-input .input-row {
@@ -593,26 +622,6 @@ body {
     cursor: not-allowed;
 }
 
-.btn-icon {
-    width: 34px;
-    height: 34px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 18px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.btn-icon:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
 /* ============================================================
    未登录遮罩
    ============================================================ */
@@ -625,30 +634,40 @@ body {
     z-index: 9999;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
-    color: #fff;
 }
 
 #loginOverlay.show {
     display: flex;
 }
 
-#loginOverlay .icon {
-    font-size: 64px;
+.login-box {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 40px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+}
+
+.login-icon {
+    font-size: 56px;
     margin-bottom: 16px;
 }
 
-#loginOverlay h2 {
+.login-box h2 {
     font-size: 24px;
+    color: var(--text-primary);
     margin-bottom: 8px;
 }
 
-#loginOverlay p {
-    color: #a0a0c0;
+.login-box p {
+    color: var(--text-muted);
     margin-bottom: 20px;
 }
 
-#loginOverlay .btn-login {
+.btn-login {
     padding: 12px 36px;
     background: var(--accent);
     color: #fff;
@@ -658,17 +677,24 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all var(--transition);
+    width: 100%;
+    margin-bottom: 10px;
 }
 
-#loginOverlay .btn-login:hover {
+.btn-login:hover {
     opacity: 0.85;
     transform: scale(1.02);
 }
 
-#loginOverlay .hint {
-    font-size: 12px;
-    color: #666;
-    margin-top: 12px;
+.btn-login.test-btn {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 10px 24px;
+}
+
+.btn-login.test-btn:hover {
+    background: var(--border-color);
 }
 
 /* ============================================================
@@ -779,54 +805,6 @@ body {
     opacity: 0.85;
 }
 
-.modal-body .search-result {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background: var(--bg-input);
-    border-radius: var(--radius-sm);
-    margin-top: 6px;
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.modal-body .search-result:hover {
-    background: var(--bg-hover);
-}
-
-.modal-body .search-result img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
-.modal-body .search-result .info {
-    flex: 1;
-}
-
-.modal-body .search-result .info .name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.modal-body .search-result .info .id {
-    font-size: 11px;
-    color: var(--text-muted);
-}
-
-.modal-body .search-result .add-btn {
-    padding: 4px 12px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-}
-
 /* ============================================================
    Toast
    ============================================================ */
@@ -863,130 +841,28 @@ body {
 }
 
 /* ============================================================
-   滚动条
+   设置页面
    ============================================================ */
-::-webkit-scrollbar {
-    width: 4px;
-}
-
-::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 2px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
-}
-
-/* ============================================================
-   响应式
-   ============================================================ */
-@media (max-width: 768px) {
-    :root {
-        --funcbar-width: 52px;
-        --sidebar-width: 240px;
-    }
-
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: var(--funcbar-width);
-        bottom: 0;
-        z-index: 5;
-        transform: translateX(0);
-        transition: transform 0.3s ease;
-    }
-
-    .sidebar.hidden {
-        transform: translateX(-100%);
-    }
-
-    .chat-window {
-        width: 100%;
-    }
-
-    .message {
-        max-width: 90%;
-    }
-
-    .message .msg-image {
-        max-width: 200px;
-    }
-
-    #loginOverlay .icon {
-        font-size: 48px;
-    }
-
-    #loginOverlay h2 {
-        font-size: 20px;
-    }
-}
-
-@media (max-width: 480px) {
-    :root {
-        --funcbar-width: 44px;
-        --sidebar-width: 200px;
-    }
-
-    .funcbar .func-item {
-        width: 38px;
-        height: 38px;
-        font-size: 18px;
-    }
-
-    .chat-item {
-        padding: 8px 12px;
-    }
-
-    .chat-item .avatar {
-        width: 32px;
-        height: 32px;
-    }
-
-    .chat-header .user img {
-        width: 28px;
-        height: 28px;
-    }
-
-    .modal {
-        padding: 16px 20px;
-    }
-}
-
-/* ============================================================
-   新增样式
-   ============================================================ */
-
-/* 侧边栏操作按钮 */
-.sidebar-action-btn {
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 18px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.3s;
+#sidebarChat, #sidebarFriends, #sidebarSettings {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
-.sidebar-action-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-/* 设置页面 */
 .settings-content {
-    padding: 12px 0;
+    padding: 8px 0;
     overflow-y: auto;
     flex: 1;
+}
+
+.settings-group-title {
+    padding: 12px 16px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .settings-item {
@@ -1004,8 +880,8 @@ body {
 }
 
 .settings-icon {
-    font-size: 22px;
-    width: 36px;
+    font-size: 20px;
+    width: 32px;
     text-align: center;
     flex-shrink: 0;
 }
@@ -1038,90 +914,291 @@ body {
     margin-top: 8px;
     display: flex;
     justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
 }
 
-/* 侧边栏切换动画 */
-#sidebarChat, #sidebarFriends, #sidebarSettings {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
-
-#sidebarChat .chat-list,
-#sidebarFriends .chat-list {
-    flex: 1;
-    overflow-y: auto;
-}
-
-/* 空状态在侧边栏 */
-.sidebar-empty {
+.empty-state-sidebar {
     text-align: center;
     padding: 40px 0;
     color: var(--text-muted);
 }
 
-.sidebar-empty .icon {
+.empty-state-sidebar .empty-icon {
     font-size: 40px;
     margin-bottom: 12px;
 }
 
-/* 好友列表项 */
-.friend-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: all 0.3s;
-    border-left: 3px solid transparent;
-}
-
-.friend-item:hover {
-    background: var(--bg-hover);
-}
-
-.friend-item .avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-}
-
-.friend-item .info {
-    flex: 1;
-    min-width: 0;
-}
-
-.friend-item .info .name {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.friend-item .info .status {
+.empty-state-sidebar .empty-hint {
     font-size: 12px;
-    color: var(--text-muted);
+    margin-top: 4px;
 }
 
-.friend-item .action-btn {
-    padding: 4px 12px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
+/* ============================================================
+   滚动条
+   ============================================================ */
+::-webkit-scrollbar {
+    width: 4px;
 }
 
-/* 移动端适配 */
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ============================================================
+   移动端适配 - 手机
+   ============================================================ */
 @media (max-width: 768px) {
-    .settings-item {
-        padding: 10px 14px;
+    :root {
+        --funcbar-width: 52px;
+        --sidebar-width: 280px;
+        --header-height: 48px;
     }
-    .settings-icon {
+
+    .funcbar .func-item {
+        width: 40px;
+        height: 40px;
         font-size: 18px;
-        width: 30px;
     }
+
+    .funcbar .func-item.avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: var(--funcbar-width);
+        bottom: 0;
+        z-index: 5;
+        transform: translateX(0);
+        transition: transform 0.3s ease;
+        box-shadow: 2px 0 20px rgba(0,0,0,0.3);
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    .chat-window {
+        width: 100%;
+    }
+
+    .chat-header {
+        padding: 8px 12px;
+    }
+
+    .btn-back {
+        display: block !important;
+    }
+
+    .message {
+        max-width: 90%;
+    }
+
+    .message-list {
+        padding: 12px 14px;
+    }
+
+    .chat-input {
+        padding: 6px 12px;
+    }
+
+    .chat-input .input-row textarea {
+        font-size: 15px;
+        padding: 8px 12px;
+        min-height: 36px;
+    }
+
+    .chat-input .input-row .btn-send {
+        padding: 6px 16px;
+        height: 36px;
+        font-size: 13px;
+    }
+
+    .login-box {
+        padding: 30px 24px;
+    }
+
+    .login-box h2 {
+        font-size: 20px;
+    }
+
+    .modal {
+        padding: 20px;
+    }
+}
+
+/* ============================================================
+   移动端适配 - 平板
+   ============================================================ */
+@media (min-width: 769px) and (max-width: 1024px) {
+    :root {
+        --funcbar-width: 56px;
+        --sidebar-width: 240px;
+    }
+
+    .funcbar .func-item {
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+    }
+}
+
+/* ============================================================
+   小屏手机
+   ============================================================ */
+@media (max-width: 480px) {
+    :root {
+        --funcbar-width: 44px;
+        --sidebar-width: 100vw;
+    }
+
+    .funcbar .func-item {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+
+    .funcbar .func-item.avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .sidebar {
+        left: 0;
+        width: 100vw;
+        max-width: 100vw;
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    .chat-item {
+        padding: 8px 12px;
+    }
+
+    .chat-item .avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .chat-header .user img {
+        width: 28px;
+        height: 28px;
+    }
+
+    .chat-header .user .name {
+        font-size: 14px;
+    }
+
+    .message {
+        max-width: 95%;
+    }
+
+    .message .msg-bubble {
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+}
+
+/* ============================================================
+   微信风格（移动端）
+   ============================================================ */
+.app.wechat-style .chat-header {
+    background: #ededed;
+    border-bottom: 1px solid #d9d9d9;
+}
+
+.app.wechat-style .chat-header .name {
+    color: #1a1a1a;
+}
+
+.app.wechat-style .chat-input {
+    background: #f7f7f7;
+    border-top: 1px solid #d9d9d9;
+}
+
+.app.wechat-style .chat-input textarea {
+    background: #ffffff;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+}
+
+.app.wechat-style .message.sent .msg-bubble {
+    background: #95ec69;
+    color: #1a1a1a;
+}
+
+.app.wechat-style .message.received .msg-bubble {
+    background: #ffffff;
+    color: #1a1a1a;
+}
+
+.app.wechat-style .funcbar {
+    background: #2e3238;
+}
+
+.app.wechat-style .funcbar .func-item.active {
+    background: rgba(255,255,255,0.1);
+    color: #95ec69;
+}
+
+.app.wechat-style .sidebar {
+    background: #ededed;
+}
+
+.app.wechat-style .sidebar-header .title {
+    color: #1a1a1a;
+}
+
+.app.wechat-style .chat-item .info .name {
+    color: #1a1a1a;
+}
+
+.app.wechat-style .chat-item.active {
+    background: rgba(74, 108, 247, 0.1);
+}
+
+/* ============================================================
+   微信风格（平板/桌面适配）
+   ============================================================ */
+@media (min-width: 769px) {
+    .app.wechat-style .chat-header {
+        background: #f5f5f5;
+    }
+    
+    .app.wechat-style .sidebar {
+        background: #f0f0f0;
+    }
+    
+    .app.wechat-style .funcbar {
+        background: #2e3238;
+    }
+}
+
+/* ============================================================
+   浅色主题 - 微信风格兼容
+   ============================================================ */
+[data-theme="light"].app.wechat-style .chat-header {
+    background: #e8e8e8;
+}
+
+[data-theme="light"].app.wechat-style .sidebar {
+    background: #f5f5f5;
+}
+
+[data-theme="light"].app.wechat-style .chat-input {
+    background: #f0f0f0;
 }
