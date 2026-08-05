@@ -1,5 +1,5 @@
 // ============================================================
-// 梓睿聊天 · 主逻辑（Supabase 版）
+// 梓睿聊天 · 主逻辑（Supabase + Airtable）
 // ============================================================
 
 // ============================================================
@@ -12,9 +12,46 @@ const CONFIG = {
 };
 
 // ============================================================
+// Airtable 配置（自动从 URL 获取 Base ID）
+// ============================================================
+const AIRTABLE_CONFIG = {
+    API_TOKEN: 'patdZcEB92LMLW3bQ.44a613d94083deff3df9f4fda69a7b7a6c851c56faf900b16c72c6ddff7021ea',
+    BASE_ID: 'app9G6YeDcFq7g09r',  // 已配置
+    TABLE_NAME: '聊天公告',
+};
+
+// ============================================================
 // DOM 引用
 // ============================================================
 const $ = (id) => document.getElementById(id);
+
+// ============================================================
+// 禁用右键菜单
+// ============================================================
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+});
+
+// 禁用 Ctrl+U（查看源代码）
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
+        e.preventDefault();
+        return false;
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        return false;
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        return false;
+    }
+    if (e.key === 'F12') {
+        e.preventDefault();
+        return false;
+    }
+});
 
 // ============================================================
 // 工具函数
@@ -46,19 +83,6 @@ function formatTime(dateStr) {
 function getInitials(name) {
     if (!name) return 'U';
     return name.charAt(0).toUpperCase();
-}
-
-function init() {
-    console.log('🚀 梓睿聊天启动 (Supabase 版)');
-    
-    // 加载主题
-    loadTheme();
-    // 加载UI模式
-    loadUIMode();
-    // 检测设备
-    detectDevice();
-
-    // ... 其余初始化代码
 }
 
 // ============================================================
@@ -122,7 +146,7 @@ function updateUIForLoggedIn() {
     if (avatar) {
         avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg';
     }
-    loadMessages();
+    loadChats();
     startPolling();
 }
 
@@ -156,6 +180,14 @@ let chatList = [];
 // 默认联系人
 const DEFAULT_CONTACTS = [
     {
+        id: 'system',
+        username: '系统服务',
+        display_name: '📢 系统公告',
+        avatar_url: 'https://zirui6.github.io/icon48.png',
+        is_default: true,
+        type: 'system'
+    },
+    {
         id: 'public',
         username: '公共频道',
         display_name: '🌐 公共频道',
@@ -174,12 +206,101 @@ const DEFAULT_CONTACTS = [
 ];
 
 // ============================================================
-// 加载消息（从 Supabase 拉取）
+// Airtable API 调用（自动获取）
 // ============================================================
-async function loadMessages() {
+async function fetchAirtableData() {
+    try {
+        const url = `https://api.airtable.com/v0/${AIRTABLE_CONFIG.BASE_ID}/${encodeURIComponent(AIRTABLE_CONFIG.TABLE_NAME)}`;
+        
+        console.log('📡 请求 Airtable:', url);
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + AIRTABLE_CONFIG.API_TOKEN,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Airtable 错误:', response.status, errorText);
+            
+            if (response.status === 401) {
+                showToast('⚠️ Airtable Token 无效，请检查配置', 'error');
+            } else if (response.status === 404) {
+                showToast('⚠️ 找不到 Airtable 表，请检查 Base ID 或表名', 'error');
+            } else {
+                showToast('⚠️ Airtable 加载失败: ' + response.status, 'error');
+            }
+            return [];
+        }
+
+        const data = await response.json();
+        console.log('✅ Airtable 数据:', data);
+
+        const records = data.records || [];
+        const items = records.map(record => {
+            const fields = record.fields || {};
+            return {
+                id: record.id,
+                title: fields['标题'] || fields['Title'] || '无标题',
+                subtitle: fields['小标题'] || fields['Subtitle'] || '',
+                publisher: fields['发布者'] || fields['Publisher'] || '系统',
+                publishDate: fields['发布时间'] || fields['Publish Date'] || new Date().toISOString(),
+                imageUrl: fields['附图链接'] || fields['Image URL'] || '',
+            };
+        });
+
+        // 按发布时间排序（最新的在前）
+        items.sort((a, b) => {
+            return new Date(b.publishDate) - new Date(a.publishDate);
+        });
+
+        return items;
+    } catch (error) {
+        console.error('❌ Airtable 错误:', error);
+        showToast('⚠️ 系统公告加载失败: ' + error.message, 'error');
+        return [];
+    }
+}
+
+// ============================================================
+// 加载系统公告
+// ============================================================
+let systemMessages = [];
+
+async function loadSystemMessages() {
+    try {
+        const items = await fetchAirtableData();
+        systemMessages = items.map((item, index) => ({
+            id: 'system_' + (item.id || index),
+            sender_id: 'system',
+            sender_name: '系统服务',
+            content: item.title,
+            subtitle: item.subtitle,
+            publisher: item.publisher,
+            publish_date: item.publishDate,
+            image_url: item.imageUrl,
+            created_at: item.publishDate,
+            is_system: true,
+            is_article: true,
+            _raw: item
+        }));
+        return systemMessages;
+    } catch (error) {
+        console.error('加载系统消息失败:', error);
+        return [];
+    }
+}
+
+// ============================================================
+// 加载聊天列表
+// ============================================================
+async function loadChats() {
     if (!isLoggedIn) return;
 
     try {
+        // 从 Supabase 获取消息
         const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=200', {
             headers: {
                 'apikey': CONFIG.SUPABASE_ANON_KEY,
@@ -187,32 +308,22 @@ async function loadMessages() {
             }
         });
 
+        let userChats = [];
         if (response.ok) {
             const data = await response.json();
-            console.log('📥 加载到 ' + data.length + ' 条消息');
-
-            // 过滤消息：只显示公共消息 + 发给自己的 + 自己发的
+            
+            // 过滤消息
             const filtered = data.filter(msg => {
-                // 公共消息：receiver_id 为 null 或 'public'
                 if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') {
                     return true;
                 }
-                // 发给自己的
-                if (msg.receiver_id === currentUser.id) {
-                    return true;
-                }
-                // 自己发的
-                if (msg.sender_id === currentUser.id) {
-                    return true;
-                }
-                // 文件传输助手
-                if (msg.receiver_id === '-1' || msg.sender_id === '-1') {
-                    return true;
-                }
+                if (msg.receiver_id === currentUser.id) return true;
+                if (msg.sender_id === currentUser.id) return true;
+                if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
                 return false;
             });
 
-            // 按发送者分组（用于聊天列表）
+            // 按发送者分组
             const grouped = {};
             filtered.forEach(msg => {
                 const key = msg.sender_id || 'unknown';
@@ -222,8 +333,7 @@ async function loadMessages() {
                 grouped[key].push(msg);
             });
 
-            // 构建聊天列表
-            const userChats = Object.keys(grouped).map(senderId => {
+            userChats = Object.keys(grouped).map(senderId => {
                 const msgs = grouped[senderId];
                 const lastMsg = msgs[0];
                 return {
@@ -236,32 +346,32 @@ async function loadMessages() {
                     type: 'friend'
                 };
             });
+        }
 
-            // 合并默认联系人
-            const existingIds = new Set(userChats.map(c => c.id));
-            const defaultFiltered = DEFAULT_CONTACTS.filter(c => !existingIds.has(c.id));
-            chatList = [...defaultFiltered, ...userChats];
+        // 合并默认联系人
+        const existingIds = new Set(userChats.map(c => c.id));
+        const defaultFiltered = DEFAULT_CONTACTS.filter(c => !existingIds.has(c.id));
+        chatList = [...defaultFiltered, ...userChats];
 
-            renderChatList();
+        renderChatList();
 
-            // 如果有当前选中的聊天，刷新消息
-            if (currentChat) {
-                const chat = chatList.find(c => c.id === currentChat.id);
-                if (chat) {
-                    currentChat = chat;
-                    // 加载该聊天对应的消息
-                    loadLocalMessages(chat.id);
-                }
-            } else if (chatList.length > 0) {
+        if (chatList.length > 0) {
+            // 默认选中系统服务
+            const systemChat = chatList.find(c => c.id === 'system');
+            if (systemChat) {
+                selectChat(systemChat);
+            } else {
                 selectChat(chatList[0]);
             }
-
-        } else {
-            console.warn('加载消息失败:', response.status);
         }
 
     } catch (error) {
-        console.error('加载消息失败:', error);
+        console.error('加载聊天失败:', error);
+        chatList = DEFAULT_CONTACTS;
+        renderChatList();
+        if (chatList.length > 0) {
+            selectChat(chatList[0]);
+        }
     }
 }
 
@@ -332,13 +442,51 @@ function selectChat(chat) {
     if (chatName) chatName.textContent = name;
     if (chatStatus) chatStatus.textContent = '在线';
 
-    loadLocalMessages(chat.id);
+    // 如果是系统服务，加载 Airtable 数据
+    if (chat.type === 'system' || chat.id === 'system') {
+        loadSystemChat();
+    } else {
+        loadLocalMessages(chat.id);
+    }
     scrollToBottom();
+
+    // 移动端关闭侧边栏
+    if (window.innerWidth <= 768) {
+        const sidebar = $('sidebar');
+        if (sidebar) sidebar.classList.add('hidden');
+    }
 }
 
 function selectChatById(id) {
     const chat = chatList.find(c => String(c.id) === String(id));
     if (chat) selectChat(chat);
+}
+
+// ============================================================
+// 加载系统聊天（从 Airtable）
+// ============================================================
+async function loadSystemChat() {
+    const list = $('messageList');
+    if (!list) return;
+
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载公告中...</div>';
+
+    const items = await loadSystemMessages();
+    
+    if (items.length === 0) {
+        list.innerHTML = `
+            <div style="text-align:center;padding:40px 0;color:#666688;">
+                <div style="font-size:40px;margin-bottom:12px;">📢</div>
+                <p>暂无公告</p>
+                <p style="font-size:12px;">系统消息将在这里显示</p>
+                <button onclick="loadSystemChat()" style="margin-top:12px;padding:6px 20px;background:#4a6cf7;color:#fff;border:none;border-radius:6px;cursor:pointer;">🔄 刷新</button>
+            </div>
+        `;
+        return;
+    }
+
+    messages = items;
+    renderMessages();
 }
 
 // ============================================================
@@ -363,7 +511,7 @@ function saveLocalMessages(chatId) {
 }
 
 // ============================================================
-// 渲染消息
+// 渲染消息（支持公众号文章样式）
 // ============================================================
 function renderMessages() {
     const list = $('messageList');
@@ -381,6 +529,13 @@ function renderMessages() {
 
     let html = '';
     messages.forEach(msg => {
+        // 如果是系统服务的文章消息
+        if (msg.is_system && msg.is_article) {
+            html += renderArticleMessage(msg);
+            return;
+        }
+
+        // 普通消息
         const isSent = msg.sender_id === currentUser?.id;
         const avatar = isSent 
             ? (currentUser?.avatar_url || 'https://zirui6.github.io/touxiang.jpg')
@@ -403,6 +558,32 @@ function renderMessages() {
 }
 
 // ============================================================
+// 渲染公众号文章样式
+// ============================================================
+function renderArticleMessage(msg) {
+    const time = formatTime(msg.publish_date || msg.created_at);
+    const imageHtml = msg.image_url ? 
+        `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')">
+            <img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" />
+        </div>` : '';
+
+    return `
+        <div class="message received article-message">
+            <div class="msg-avatar system-avatar">📢</div>
+            <div>
+                <div class="msg-bubble article-bubble">
+                    <div class="article-publisher">📢 ${msg.publisher || '系统服务'}</div>
+                    <div class="article-title">${msg.content}</div>
+                    ${msg.subtitle ? `<div class="article-subtitle">${msg.subtitle}</div>` : ''}
+                    ${imageHtml}
+                    <div class="article-time">${time}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
 // 发送消息到 Supabase
 // ============================================================
 async function sendMessage() {
@@ -416,6 +597,10 @@ async function sendMessage() {
     }
     if (!currentUser) {
         showToast('请先登录', 'error');
+        return;
+    }
+    if (currentChat.type === 'system') {
+        showToast('⚠️ 系统公告频道不能发送消息', 'warning');
         return;
     }
 
@@ -435,8 +620,6 @@ async function sendMessage() {
         receiver_id: receiverId,
         created_at: new Date().toISOString()
     };
-
-    console.log('📤 发送消息:', msgData);
 
     // 立即显示在本地
     const localMsg = {
@@ -495,8 +678,10 @@ function startPolling() {
 
     pollingInterval = setInterval(async () => {
         if (!isLoggedIn) return;
+        if (currentChat && (currentChat.type === 'system' || currentChat.id === 'system')) {
+            return;
+        }
         try {
-            // 只刷新当前聊天
             if (currentChat) {
                 const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=50', {
                     headers: {
@@ -507,7 +692,6 @@ function startPolling() {
 
                 if (response.ok) {
                     const data = await response.json();
-                    // 过滤消息
                     const filtered = data.filter(msg => {
                         if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') {
                             return true;
@@ -518,12 +702,10 @@ function startPolling() {
                         return false;
                     });
 
-                    // 检查是否有新消息
                     if (filtered.length > 0) {
                         const latest = filtered[0];
                         const lastLocal = messages[messages.length - 1];
                         if (!lastLocal || latest.id !== lastLocal.id) {
-                            // 有新消息，重新加载
                             console.log('🔄 检测到新消息，刷新...');
                             loadLocalMessages(currentChat.id);
                         }
@@ -533,7 +715,7 @@ function startPolling() {
         } catch (error) {
             console.error('轮询错误:', error);
         }
-    }, 3000);
+    }, 5000);
 }
 
 // ============================================================
@@ -574,9 +756,9 @@ function switchTab(tab) {
     const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
     if (activeBtn) activeBtn.classList.add('active');
 
-    const sidebarChat = document.getElementById('sidebarChat');
-    const sidebarFriends = document.getElementById('sidebarFriends');
-    const sidebarSettings = document.getElementById('sidebarSettings');
+    const sidebarChat = $('sidebarChat');
+    const sidebarFriends = $('sidebarFriends');
+    const sidebarSettings = $('sidebarSettings');
 
     if (sidebarChat) sidebarChat.style.display = tab === 'chat' ? 'flex' : 'none';
     if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
@@ -587,19 +769,19 @@ function openSettings() { switchTab('settings'); }
 function openTest() { window.open('test.html', '_blank'); }
 
 function openAddFriend() {
-    document.getElementById('addFriendModal').classList.add('show');
-    document.getElementById('addFriendInput').focus();
+    $('addFriendModal').classList.add('show');
+    $('addFriendInput').focus();
 }
 
 function closeAddFriend() {
-    document.getElementById('addFriendModal').classList.remove('show');
-    document.getElementById('addFriendInput').value = '';
-    document.getElementById('addFriendMsg').value = '';
-    document.getElementById('searchResults').innerHTML = '';
+    $('addFriendModal').classList.remove('show');
+    $('addFriendInput').value = '';
+    $('addFriendMsg').value = '';
+    $('searchResults').innerHTML = '';
 }
 
 function loadFriendList() {
-    const list = document.getElementById('friendList');
+    const list = $('friendList');
     if (!list) return;
     list.innerHTML = `
         <div style="text-align:center;padding:40px 0;color:#666688;">
@@ -611,7 +793,7 @@ function loadFriendList() {
 }
 
 function searchAndAddFriend() {
-    const input = document.getElementById('addFriendInput');
+    const input = $('addFriendInput');
     const keyword = input.value.trim();
     if (!keyword) {
         showToast('请输入用户ID或用户名', 'warning');
@@ -646,15 +828,15 @@ function logout() {
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
-        document.getElementById('loginOverlay').classList.add('show');
+        $('loginOverlay').classList.add('show');
         updateUIForGuest();
         showToast('已退出登录', 'info');
     }
 }
 
 function openQR() {
-    const modal = document.getElementById('qrModal');
-    const userIdEl = document.getElementById('qrUserId');
+    const modal = $('qrModal');
+    const userIdEl = $('qrUserId');
     if (modal) modal.classList.add('show');
     if (userIdEl && currentUser) {
         userIdEl.textContent = currentUser.id || '-';
@@ -662,7 +844,7 @@ function openQR() {
 }
 
 function closeQR() {
-    document.getElementById('qrModal').classList.remove('show');
+    $('qrModal').classList.remove('show');
 }
 
 function copyUserId() {
@@ -685,167 +867,13 @@ function copyUserId() {
 }
 
 // ============================================================
-// 主题切换
-// ============================================================
-function toggleTheme() {
-    const html = document.documentElement;
-    const current = html.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    showToast(next === 'dark' ? '🌙 深色模式' : '☀️ 浅色模式', 'info');
-}
-
-function loadTheme() {
-    const saved = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-}
-
-// ============================================================
-// 移动端检测 & UI 切换
-// ============================================================
-let isMobile = false;
-
-function detectMobile() {
-    isMobile = window.innerWidth <= 768;
-    const app = document.getElementById('app');
-    if (isMobile) {
-        app.classList.add('mobile');
-        document.body.classList.add('mobile-mode');
-    } else {
-        app.classList.remove('mobile');
-        document.body.classList.remove('mobile-mode');
-    }
-}
-
-function toggleMobileStyle() {
-    const app = document.getElementById('app');
-    app.classList.toggle('wechat-style');
-    const isWechat = app.classList.contains('wechat-style');
-    localStorage.setItem('ui_style', isWechat ? 'wechat' : 'default');
-    showToast(isWechat ? '📱 微信风格' : '💻 默认风格', 'info');
-}
-
-function loadUIStyle() {
-    const style = localStorage.getItem('ui_style') || 'default';
-    const app = document.getElementById('app');
-    if (style === 'wechat') {
-        app.classList.add('wechat-style');
-    }
-}
-
-// ============================================================
-// 事件绑定
-// ============================================================
-document.addEventListener('DOMContentLoaded', function() {
-    // 加载主题
-    loadTheme();
-    // 加载UI风格
-    loadUIStyle();
-    // 检测移动端
-    detectMobile();
-
-    const sendBtn = $('sendBtn');
-    const messageInput = $('messageInput');
-
-    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-
-    if (messageInput) {
-        messageInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        messageInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-        });
-    }
-
-    document.getElementById('fileInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
-        }
-        this.value = '';
-    });
-
-    document.getElementById('imageInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
-        }
-        this.value = '';
-    });
-
-    document.getElementById('addFriendSubmit')?.addEventListener('click', searchAndAddFriend);
-    document.getElementById('addFriendInput')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') searchAndAddFriend();
-    });
-
-    document.getElementById('avatarBtn')?.addEventListener('click', openQR);
-    document.getElementById('copyIdBtn')?.addEventListener('click', copyUserId);
-
-    // 窗口大小变化时重新检测移动端
-    window.addEventListener('resize', detectMobile);
-});
-
-// 暴露函数给 HTML
-window.goToLogin = goToLogin;
-window.goToTest = goToTest;
-window.switchTab = switchTab;
-window.openSettings = openSettings;
-window.openTest = openTest;
-window.openAddFriend = openAddFriend;
-window.closeAddFriend = closeAddFriend;
-window.searchAndAddFriend = searchAndAddFriend;
-window.clearAllData = clearAllData;
-window.logout = logout;
-window.openQR = openQR;
-window.closeQR = closeQR;
-window.copyUserId = copyUserId;
-window.sendMessage = sendMessage;
-window.toggleTheme = toggleTheme;
-window.toggleMobileStyle = toggleMobileStyle;
-
-// ============================================================
-// 初始化
-// ============================================================
-function init() {
-    console.log('🚀 梓睿聊天启动 (Supabase 版)');
-
-    const urlUser = getUserFromURL();
-    if (urlUser) {
-        console.log('✅ 从 URL 获取用户:', urlUser.username);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    const loggedIn = checkLoginStatus();
-    if (loggedIn) {
-        console.log('✅ 已登录:', currentUser?.username);
-    } else {
-        console.log('👤 未登录');
-        const user = getLocalUser();
-        if (user && user.id) {
-            currentUser = user;
-            isLoggedIn = true;
-            const overlay = $('loginOverlay');
-            if (overlay) overlay.classList.remove('show');
-            updateUIForLoggedIn();
-        }
-    }
-}
-
-// ============================================================
 // 设备检测 & UI 模式
 // ============================================================
-
-let deviceType = 'desktop'; // 'desktop' | 'tablet' | 'mobile'
-let uiMode = 'auto'; // 'auto' | 'default' | 'wechat'
+let deviceType = 'desktop';
+let uiMode = 'auto';
 
 function detectDevice() {
     const width = window.innerWidth;
-    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
     if (width <= 480) {
         deviceType = 'mobile';
     } else if (width <= 1024) {
@@ -853,8 +881,6 @@ function detectDevice() {
     } else {
         deviceType = 'desktop';
     }
-    
-    // 更新设备信息显示
     const deviceInfo = document.getElementById('deviceInfo');
     if (deviceInfo) {
         const icons = {
@@ -864,25 +890,18 @@ function detectDevice() {
         };
         deviceInfo.textContent = icons[deviceType] || '🖥️ 桌面';
     }
-    
-    // 自动应用UI模式
     applyUIMode();
-    
     return deviceType;
 }
 
 function applyUIMode() {
     const app = document.getElementById('app');
+    if (!app) return;
     const mode = uiMode === 'auto' ? getAutoMode() : uiMode;
-    
-    // 清除所有模式
     app.classList.remove('wechat-style');
-    
     if (mode === 'wechat') {
         app.classList.add('wechat-style');
     }
-    
-    // 更新设置中的显示
     const statusEl = document.getElementById('uiModeStatus');
     if (statusEl) {
         const labels = {
@@ -895,7 +914,6 @@ function applyUIMode() {
 }
 
 function getAutoMode() {
-    // 手机和平板默认使用微信风格
     if (deviceType === 'mobile' || deviceType === 'tablet') {
         return 'wechat';
     }
@@ -928,7 +946,6 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
-    
     const statusEl = document.getElementById('themeStatus');
     if (statusEl) {
         statusEl.textContent = next === 'dark' ? '深色模式' : '浅色模式';
@@ -949,34 +966,21 @@ function loadTheme() {
 // 移动端侧边栏控制
 // ============================================================
 function closeChat() {
-    const sidebar = document.getElementById('sidebar');
+    const sidebar = $('sidebar');
     if (sidebar) {
         sidebar.classList.add('hidden');
     }
 }
 
-function openSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) {
-        sidebar.classList.remove('hidden');
-    }
-}
-
-// 点击聊天窗口时关闭侧边栏（移动端）
+// ============================================================
+// 事件绑定
+// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-    const chatWindow = document.getElementById('chatWindow');
-    if (chatWindow) {
-        chatWindow.addEventListener('click', function() {
-            if (window.innerWidth <= 768) {
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar && !sidebar.classList.contains('hidden')) {
-                    // 不自动关闭，让用户手动控制
-                }
-            }
-        });
-    }
-    
-    // 窗口大小变化时重新检测
+    loadTheme();
+    loadUIMode();
+    detectDevice();
+
+    // 窗口大小变化重新检测
     let resizeTimer;
     window.addEventListener('resize', function() {
         clearTimeout(resizeTimer);
@@ -984,13 +988,94 @@ document.addEventListener('DOMContentLoaded', function() {
             detectDevice();
         }, 300);
     });
+
+    const sendBtn = $('sendBtn');
+    const messageInput = $('messageInput');
+
+    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+
+    if (messageInput) {
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+    }
+
+    $('fileInput')?.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
+        }
+        this.value = '';
+    });
+
+    $('imageInput')?.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
+        }
+        this.value = '';
+    });
+
+    $('addFriendSubmit')?.addEventListener('click', searchAndAddFriend);
+    $('addFriendInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') searchAndAddFriend();
+    });
+
+    $('avatarBtn')?.addEventListener('click', openQR);
+    $('copyIdBtn')?.addEventListener('click', copyUserId);
 });
 
-// 在初始化中调用
-// 在 init 函数中添加：
-// loadTheme();
-// loadUIMode();
-// detectDevice();
+// 暴露函数给 HTML
+window.goToLogin = goToLogin;
+window.goToTest = goToTest;
+window.switchTab = switchTab;
+window.openSettings = openSettings;
+window.openTest = openTest;
+window.openAddFriend = openAddFriend;
+window.closeAddFriend = closeAddFriend;
+window.searchAndAddFriend = searchAndAddFriend;
+window.clearAllData = clearAllData;
+window.logout = logout;
+window.openQR = openQR;
+window.closeQR = closeQR;
+window.copyUserId = copyUserId;
+window.sendMessage = sendMessage;
+window.toggleTheme = toggleTheme;
+window.toggleUIMode = toggleUIMode;
+window.loadSystemChat = loadSystemChat;
+
+// ============================================================
+// 初始化
+// ============================================================
+function init() {
+    console.log('🚀 梓睿聊天启动 (Supabase + Airtable)');
+
+    const urlUser = getUserFromURL();
+    if (urlUser) {
+        console.log('✅ 从 URL 获取用户:', urlUser.username);
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    const loggedIn = checkLoginStatus();
+    if (loggedIn) {
+        console.log('✅ 已登录:', currentUser?.username);
+    } else {
+        console.log('👤 未登录');
+        const user = getLocalUser();
+        if (user && user.id) {
+            currentUser = user;
+            isLoggedIn = true;
+            const overlay = $('loginOverlay');
+            if (overlay) overlay.classList.remove('show');
+            updateUIForLoggedIn();
+        }
+    }
+}
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -999,3 +1084,4 @@ if (document.readyState === 'loading') {
 }
 
 console.log('📋 Supabase URL:', CONFIG.SUPABASE_URL);
+console.log('📋 Airtable Base ID:', AIRTABLE_CONFIG.BASE_ID);
