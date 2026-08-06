@@ -345,12 +345,12 @@ function updateUIForGuest() {
 }
 
 // ============================================================
-// 加载聊天列表 - 只显示有对话的人
+// 加载聊天列表 - 显示所有在 messages 表出现过的用户
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
     try {
-        const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=200', {
+        const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=500', {
             headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY }
         });
 
@@ -358,46 +358,62 @@ async function loadChats() {
         if (response.ok) {
             const data = await response.json();
             
-            // 找出所有与当前用户有对话的人
-            const chatPartners = new Set();
+            // 提取所有出现过的用户（排除系统、公共、文件传输）
+            const userSet = new Set();
             data.forEach(msg => {
-                // 别人发给自己的
-                if (msg.receiver_id === currentUser.id && msg.sender_id) {
-                    chatPartners.add(msg.sender_id);
-                }
-                // 自己发给别人的
-                if (msg.sender_id === currentUser.id && msg.receiver_id) {
-                    // 排除公共消息和文件传输助手
-                    if (msg.receiver_id !== 'null' && msg.receiver_id !== 'public' && msg.receiver_id !== '-1') {
-                        chatPartners.add(msg.receiver_id);
-                    }
+                if (msg.sender_id === 'system' || msg.receiver_id === 'system') return;
+                if (msg.receiver_id === 'public' || msg.receiver_id === 'null' || msg.receiver_id === null) return;
+                if (msg.sender_id === '-1' || msg.receiver_id === '-1') return;
+                if (msg.sender_id) userSet.add(msg.sender_id);
+                if (msg.receiver_id && msg.receiver_id !== 'null' && msg.receiver_id !== 'public') {
+                    userSet.add(msg.receiver_id);
                 }
             });
 
-            // 构建聊天列表
-            const partnerIds = Array.from(chatPartners);
-            userChats = partnerIds.map(id => {
-                // 找最新的一条消息
-                const msgs = data.filter(m => 
-                    (m.sender_id === id && m.receiver_id === currentUser.id) ||
-                    (m.sender_id === currentUser.id && m.receiver_id === id)
-                );
-                const lastMsg = msgs.length > 0 ? msgs[0] : null;
-                return {
-                    id: id,
-                    username: lastMsg?.sender_name || '用户',
-                    display_name: lastMsg?.sender_name || '用户',
-                    avatar_url: 'https://zirui6.github.io/touxiang.jpg',
-                    last_message: lastMsg?.content || '暂无消息',
-                    last_time: lastMsg?.created_at || new Date().toISOString(),
-                    type: 'friend'
-                };
-            });
+            // 构建用户列表
+            const userIds = Array.from(userSet);
+            userChats = userIds
+                .filter(id => id !== currentUser.id)
+                .map(id => {
+                    // 查找与该用户相关的最后一条消息
+                    const msgs = data.filter(m =>
+                        (m.sender_id === id && m.receiver_id === currentUser.id) ||
+                        (m.sender_id === currentUser.id && m.receiver_id === id)
+                    );
+                    const lastMsg = msgs.length > 0 ? msgs[0] : null;
+                    const anyMsg = lastMsg || data.find(m => m.sender_id === id);
+
+                    return {
+                        id: id,
+                        username: anyMsg?.sender_name || '用户',
+                        display_name: anyMsg?.sender_name || '用户',
+                        avatar_url: 'https://zirui6.github.io/touxiang.jpg',
+                        last_message: lastMsg?.content || '暂无消息',
+                        last_time: lastMsg?.created_at || anyMsg?.created_at || new Date().toISOString(),
+                        type: 'friend'
+                    };
+                });
         }
 
+        // 合并默认联系人（去重）
         const existingIds = new Set(userChats.map(c => c.id));
         const defaultFiltered = DEFAULT_CONTACTS.filter(c => !existingIds.has(c.id));
-        chatList = [...defaultFiltered, ...userChats];
+
+        // 去重并排序
+        const allChats = [...defaultFiltered, ...userChats];
+        const seen = new Set();
+        chatList = allChats
+            .filter(chat => {
+                const key = chat.id;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => {
+                if (a.is_default && !b.is_default) return -1;
+                if (!a.is_default && b.is_default) return 1;
+                return new Date(b.last_time) - new Date(a.last_time);
+            });
 
         renderChatList();
 
@@ -510,7 +526,7 @@ function selectChatById(id) {
 }
 
 // ============================================================
-// 加载聊天历史
+// 加载聊天历史（严格的双向过滤）
 // ============================================================
 async function loadChatHistory(chatId) {
     const list = $('messageList');
@@ -526,13 +542,18 @@ async function loadChatHistory(chatId) {
         if (response.ok) {
             const data = await response.json();
             const filtered = data.filter(msg => {
+                // 公共频道
                 if (chatId === 'public') {
                     return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
                 }
+                // 文件传输助手
                 if (chatId === '-1') {
                     return msg.receiver_id === '-1' || msg.sender_id === '-1';
                 }
-                return msg.sender_id === chatId || msg.receiver_id === chatId || msg.sender_id === currentUser.id;
+                // 私聊：严格双向过滤
+                const fromOtherToMe = msg.sender_id === chatId && msg.receiver_id === currentUser.id;
+                const fromMeToOther = msg.sender_id === currentUser.id && msg.receiver_id === chatId;
+                return fromOtherToMe || fromMeToOther;
             });
 
             if (filtered.length > 0) {
