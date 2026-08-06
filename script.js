@@ -345,7 +345,7 @@ function updateUIForGuest() {
 }
 
 // ============================================================
-// 加载聊天列表
+// 加载聊天列表 - 只显示有对话的人
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
@@ -357,29 +357,39 @@ async function loadChats() {
         let userChats = [];
         if (response.ok) {
             const data = await response.json();
-            const filtered = data.filter(msg => {
-                if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
-                if (msg.receiver_id === currentUser.id) return true;
-                if (msg.sender_id === currentUser.id) return true;
-                if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
-                return false;
+            
+            // 找出所有与当前用户有对话的人
+            const chatPartners = new Set();
+            data.forEach(msg => {
+                // 别人发给自己的
+                if (msg.receiver_id === currentUser.id && msg.sender_id) {
+                    chatPartners.add(msg.sender_id);
+                }
+                // 自己发给别人的
+                if (msg.sender_id === currentUser.id && msg.receiver_id) {
+                    // 排除公共消息和文件传输助手
+                    if (msg.receiver_id !== 'null' && msg.receiver_id !== 'public' && msg.receiver_id !== '-1') {
+                        chatPartners.add(msg.receiver_id);
+                    }
+                }
             });
-            const grouped = {};
-            filtered.forEach(msg => {
-                const key = msg.sender_id || 'unknown';
-                if (!grouped[key]) grouped[key] = [];
-                grouped[key].push(msg);
-            });
-            userChats = Object.keys(grouped).map(senderId => {
-                const msgs = grouped[senderId];
-                const lastMsg = msgs[0];
+
+            // 构建聊天列表
+            const partnerIds = Array.from(chatPartners);
+            userChats = partnerIds.map(id => {
+                // 找最新的一条消息
+                const msgs = data.filter(m => 
+                    (m.sender_id === id && m.receiver_id === currentUser.id) ||
+                    (m.sender_id === currentUser.id && m.receiver_id === id)
+                );
+                const lastMsg = msgs.length > 0 ? msgs[0] : null;
                 return {
-                    id: senderId,
-                    username: lastMsg.sender_name || '用户',
-                    display_name: lastMsg.sender_name || '用户',
+                    id: id,
+                    username: lastMsg?.sender_name || '用户',
+                    display_name: lastMsg?.sender_name || '用户',
                     avatar_url: 'https://zirui6.github.io/touxiang.jpg',
-                    last_message: lastMsg.content || '',
-                    last_time: lastMsg.created_at || new Date().toISOString(),
+                    last_message: lastMsg?.content || '暂无消息',
+                    last_time: lastMsg?.created_at || new Date().toISOString(),
                     type: 'friend'
                 };
             });
