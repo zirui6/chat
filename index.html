@@ -2,7 +2,7 @@
 <html lang="zh-CN" id="htmlRoot">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>梓睿聊天</title>
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -61,7 +61,7 @@
                     <div class="title">💬 聊天</div>
                     <div class="sidebar-actions">
                         <button class="sidebar-action-btn" onclick="openAddFriend()" title="添加好友">➕</button>
-                        <button class="sidebar-action-btn" onclick="openSettings()" title="设置">⚙️</button>
+                        <button class="sidebar-action-btn" onclick="switchTab('settings')" title="设置">⚙️</button>
                     </div>
                 </div>
                 <div class="sidebar-search">
@@ -98,7 +98,6 @@
                 </div>
                 <div class="settings-content">
                     <div class="settings-group-title">通用</div>
-                    
                     <div class="settings-item" onclick="openTest()">
                         <span class="settings-icon">🧪</span>
                         <div class="settings-info">
@@ -107,7 +106,6 @@
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-                    
                     <div class="settings-item" onclick="openAddFriend()">
                         <span class="settings-icon">➕</span>
                         <div class="settings-info">
@@ -116,29 +114,24 @@
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-
                     <div class="settings-group-title">外观</div>
-
                     <div class="settings-item" onclick="toggleTheme()">
                         <span class="settings-icon">🌓</span>
                         <div class="settings-info">
                             <div class="settings-name">切换主题</div>
-                            <div class="settings-desc" id="themeStatus">深色模式</div>
+                            <div class="settings-desc" id="themeStatus">浅色模式</div>
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-
-                    <div class="settings-item" onclick="toggleUIMode()">
+                    <div class="settings-item" onclick="switchToPhone()">
                         <span class="settings-icon">📱</span>
                         <div class="settings-info">
-                            <div class="settings-name">UI模式</div>
-                            <div class="settings-desc" id="uiModeStatus">自动</div>
+                            <div class="settings-name">切换到手机版</div>
+                            <div class="settings-desc">打开手机适配界面</div>
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-
                     <div class="settings-group-title">数据</div>
-
                     <div class="settings-item" onclick="clearAllData()">
                         <span class="settings-icon">🗑️</span>
                         <div class="settings-info">
@@ -147,7 +140,6 @@
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-
                     <div class="settings-item" onclick="logout()" style="border-bottom:none;">
                         <span class="settings-icon">🚪</span>
                         <div class="settings-info">
@@ -156,56 +148,51 @@
                         </div>
                         <span class="settings-arrow">→</span>
                     </div>
-
                     <div class="settings-footer">
                         <span>版本 2.0</span>
-                        <span id="deviceInfo">🖥️ 桌面端</span>
+                        <span id="deviceInfo">🖥️ 桌面版</span>
                     </div>
                 </div>
             </div>
         </div>
 
-<!-- ===== 聊天窗口 ===== -->
-<div class="chat-window" id="chatWindow">
-    <!-- 空状态 -->
-    <div class="empty-state" id="emptyState">
-        <div class="empty-icon">💬</div>
-        <h3>选择聊天</h3>
-        <p>从左侧选择好友开始聊天</p>
-    </div>
+        <!-- ===== 聊天窗口 ===== -->
+        <div class="chat-window" id="chatWindow">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-icon">💬</div>
+                <h3>选择聊天</h3>
+                <p>从左侧选择好友开始聊天</p>
+            </div>
 
-    <!-- 聊天头部 -->
-    <div class="chat-header" id="chatHeader" style="display:none;">
-        <div class="chat-header-left">
-            <button class="btn-back" id="backBtn" onclick="closeChat()" style="display:none;">‹</button>
-            <div>
-                <div class="name" id="chatName">用户</div>
-                <div class="status" id="chatStatus">在线</div>
+            <div class="chat-header" id="chatHeader" style="display:none;">
+                <div class="chat-header-left">
+                    <div>
+                        <div class="name" id="chatName">用户</div>
+                        <div class="status" id="chatStatus">在线</div>
+                    </div>
+                </div>
+                <div class="chat-header-right">
+                    <button class="btn-icon" onclick="showToast('更多功能开发中', 'info')">⋯</button>
+                </div>
+            </div>
+
+            <div class="message-list" id="messageList"></div>
+
+            <div class="chat-input" id="chatInput" style="display:none;">
+                <div class="tools">
+                    <button class="tool-btn" onclick="showToast('😊 表情功能开发中', 'info')">😊</button>
+                    <button class="tool-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()">📎</button>
+                    <button class="tool-btn" id="imageBtn" onclick="document.getElementById('imageInput').click()">🖼️</button>
+                    <input type="file" id="fileInput" accept="*/*" style="display:none;" />
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;" />
+                </div>
+                <div class="input-row">
+                    <textarea id="messageInput" rows="1" placeholder="输入消息..." maxlength="10000"></textarea>
+                    <button class="btn-send" id="sendBtn">发送</button>
+                </div>
             </div>
         </div>
-        <div class="chat-header-right">
-            <button class="btn-icon" onclick="showToast('更多功能开发中', 'info')">⋯</button>
-        </div>
     </div>
-
-    <!-- 消息列表 -->
-    <div class="message-list" id="messageList"></div>
-
-    <!-- 输入区 -->
-    <div class="chat-input" id="chatInput" style="display:none;">
-        <div class="tools">
-            <button class="tool-btn" onclick="showToast('😊 表情功能开发中', 'info')">😊</button>
-            <button class="tool-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()">📎</button>
-            <button class="tool-btn" id="imageBtn" onclick="document.getElementById('imageInput').click()">🖼️</button>
-            <input type="file" id="fileInput" accept="*/*" style="display:none;" />
-            <input type="file" id="imageInput" accept="image/*" style="display:none;" />
-        </div>
-        <div class="input-row">
-            <textarea id="messageInput" rows="1" placeholder="输入消息..." maxlength="10000"></textarea>
-            <button class="btn-send" id="sendBtn">发送</button>
-        </div>
-    </div>
-</div>
 
     <!-- ===== 添加好友弹窗 ===== -->
     <div class="modal-overlay" id="addFriendModal">

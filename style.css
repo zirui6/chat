@@ -1626,3 +1626,97 @@ body {
     justify-content: center;
     line-height: 1;
 }
+
+/* ============================================================
+   消息 - 头像+昵称样式
+   ============================================================ */
+.message {
+    display: flex;
+    gap: 10px;
+    max-width: 80%;
+    animation: msgIn 0.3s ease;
+    margin-bottom: 8px;
+}
+
+.message.sent {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+.message.received {
+    align-self: flex-start;
+}
+
+/* 头像+昵称容器 */
+.msg-avatar-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.msg-avatar-wrapper .msg-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.msg-avatar-wrapper .msg-sender {
+    font-size: 10px;
+    color: var(--text-muted);
+    max-width: 44px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.message .msg-bubble {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    max-width: 100%;
+    word-wrap: break-word;
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+.message.sent .msg-bubble {
+    background: var(--bg-bubble-sent);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.message.received .msg-bubble {
+    background: var(--bg-bubble-received);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--shadow);
+}
+
+.message .msg-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 4px;
+}
+
+.message.sent .msg-time {
+    text-align: right;
+}
+
+/* 系统公告头像 */
+.system-avatar {
+    background: #4a6cf7;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}

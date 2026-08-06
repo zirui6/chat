@@ -34,6 +34,16 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ============================================================
+// 页面切换函数
+// ============================================================
+function switchToPhone() {
+    window.location.href = 'phone.html' + window.location.search;
+}
+function switchToDesktop() {
+    window.location.href = 'index.html' + window.location.search;
+}
+
+// ============================================================
 // Toast
 // ============================================================
 let toastTimer = null;
@@ -287,6 +297,7 @@ async function loadChats() {
         let userChats = [];
         if (response.ok) {
             const data = await response.json();
+            // 过滤出当前用户参与的消息
             const filtered = data.filter(msg => {
                 if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
                 if (msg.receiver_id === currentUser.id) return true;
@@ -294,6 +305,7 @@ async function loadChats() {
                 if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
                 return false;
             });
+            // 按发送者分组
             const grouped = {};
             filtered.forEach(msg => {
                 const key = msg.sender_id || 'unknown';
@@ -383,7 +395,7 @@ function renderChatList() {
 }
 
 // ============================================================
-// 选择聊天
+// 选择聊天 - 从数据库加载历史消息
 // ============================================================
 function selectChat(chat) {
     if (!chat) return;
@@ -406,10 +418,11 @@ function selectChat(chat) {
     if (chatName) chatName.textContent = name;
     if (chatStatus) chatStatus.textContent = '在线';
 
+    // 从数据库加载历史消息
     if (chat.type === 'system' || chat.id === 'system') {
         loadSystemChat();
     } else {
-        loadLocalMessages(chat.id);
+        loadChatHistory(chat.id);
     }
     scrollToBottom();
 
@@ -422,6 +435,75 @@ function selectChat(chat) {
 function selectChatById(id) {
     const chat = chatList.find(c => String(c.id) === String(id));
     if (chat) selectChat(chat);
+}
+
+// ============================================================
+// 从数据库加载聊天历史
+// ============================================================
+async function loadChatHistory(chatId) {
+    const list = $('messageList');
+    if (!list) return;
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载历史消息...</div>';
+
+    try {
+        // 查询与该用户相关的所有消息
+        const response = await fetch(
+            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=200`,
+            {
+                headers: {
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
+                }
+            }
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+            // 过滤出与当前聊天的消息
+            const filtered = data.filter(msg => {
+                // 公共频道消息
+                if (chatId === 'public') {
+                    return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
+                }
+                // 文件传输助手
+                if (chatId === '-1') {
+                    return msg.receiver_id === '-1' || msg.sender_id === '-1';
+                }
+                // 私聊：发送者是对方 或 接收者是对方
+                return msg.sender_id === chatId || msg.receiver_id === chatId;
+            });
+
+            if (filtered.length > 0) {
+                messages = filtered;
+                // 保存到本地缓存
+                saveLocalMessages(chatId);
+                renderMessages();
+            } else {
+                // 没有历史消息
+                messages = [];
+                renderMessages();
+                // 添加欢迎消息
+                if (chatId === 'public') {
+                    messages.push({
+                        id: Date.now(),
+                        sender_id: 'system',
+                        sender_name: '系统',
+                        content: '👋 欢迎来到公共频道！在这里可以自由交流。',
+                        created_at: new Date().toISOString(),
+                        is_system: true
+                    });
+                    saveLocalMessages(chatId);
+                    renderMessages();
+                }
+            }
+        } else {
+            // 加载失败，尝试从本地读取
+            loadLocalMessages(chatId);
+        }
+    } catch (error) {
+        console.error('加载历史失败:', error);
+        loadLocalMessages(chatId);
+    }
 }
 
 // ============================================================
@@ -448,7 +530,7 @@ async function loadSystemChat() {
 }
 
 // ============================================================
-// 本地消息存储
+// 本地消息存储（缓存）
 // ============================================================
 function loadLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
@@ -460,28 +542,39 @@ function saveLocalMessages(chatId) {
 }
 
 // ============================================================
-// 渲染消息（无头像）
+// 渲染消息 - 显示头像+昵称+内容
 // ============================================================
 function renderMessages() {
     const list = $('messageList');
     if (!list) return;
 
     if (!messages || messages.length === 0) {
-        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><p>暂无消息</p><p style="font-size:12px;">开始聊天吧</p></div>`;
+        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><p>暂无消息</p><p style="font-size:12px;">发送第一条消息吧</p></div>`;
         return;
     }
 
     let html = '';
     messages.forEach(msg => {
+        // 系统公告文章
         if (msg.is_system && msg.is_article) {
             html += renderArticleMessage(msg);
             return;
         }
+
         const isSent = msg.sender_id === currentUser?.id;
+        const senderName = msg.sender_name || '用户';
+        const avatar = isSent 
+            ? (currentUser?.avatar_url || 'https://zirui6.github.io/touxiang.jpg')
+            : (currentChat?.avatar_url || 'https://zirui6.github.io/touxiang.jpg');
         const time = formatTime(msg.created_at);
+
         html += `
             <div class="message ${isSent ? 'sent' : 'received'}">
-                <div>
+                <div class="msg-avatar-wrapper">
+                    <img src="${avatar}" class="msg-avatar" alt="" onerror="this.src='https://zirui6.github.io/touxiang.jpg'" />
+                    <div class="msg-sender">${senderName}</div>
+                </div>
+                <div class="msg-content-wrapper">
                     <div class="msg-bubble">${msg.content || ''}</div>
                     <div class="msg-time">${time}</div>
                 </div>
@@ -501,7 +594,11 @@ function renderArticleMessage(msg) {
     const imageHtml = msg.image_url ? `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')"><img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" /></div>` : '';
     return `
         <div class="message received article-message">
-            <div>
+            <div class="msg-avatar-wrapper">
+                <div class="msg-avatar system-avatar">📢</div>
+                <div class="msg-sender">系统服务</div>
+            </div>
+            <div class="msg-content-wrapper">
                 <div class="msg-bubble article-bubble">
                     <div class="article-publisher">📢 ${msg.publisher || '系统服务'}</div>
                     <div class="article-title">${msg.content}</div>
@@ -572,7 +669,7 @@ async function sendMessage() {
 }
 
 // ============================================================
-// 轮询
+// 轮询（自动刷新 + 未读计数）
 // ============================================================
 function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
@@ -600,7 +697,7 @@ function startPolling() {
                         const newMsgs = filtered.filter(m => m.id > lastId);
                         if (currentChat) {
                             const isCurrent = newMsgs.some(m => m.sender_id === currentChat.id || m.receiver_id === currentChat.id);
-                            if (isCurrent) { loadLocalMessages(currentChat.id); }
+                            if (isCurrent) { loadChatHistory(currentChat.id); }
                             else {
                                 newMsgs.forEach(m => { if (m.sender_id !== currentUser.id) { incrementUnread(m.sender_id); } });
                             }
@@ -684,7 +781,7 @@ function clearAllData() {
             if (key.startsWith('chat_messages_') || key.startsWith('chat_unread_')) { localStorage.removeItem(key); }
         });
         showToast('✅ 缓存已清除', 'success');
-        if (currentChat) { loadLocalMessages(currentChat.id); }
+        if (currentChat) { loadChatHistory(currentChat.id); }
         updateTotalBadge();
     }
 }
@@ -729,60 +826,14 @@ function copyUserId() {
     }
 }
 
+function closeChat() {
+    const sidebar = $('sidebar');
+    if (sidebar) sidebar.classList.remove('hidden');
+}
+
 // ============================================================
-// 设备检测 & UI 模式
+// 主题切换
 // ============================================================
-let deviceType = 'desktop';
-let uiMode = 'auto';
-
-function detectDevice() {
-    const width = window.innerWidth;
-    if (width <= 480) { deviceType = 'mobile'; }
-    else if (width <= 1024) { deviceType = 'tablet'; }
-    else { deviceType = 'desktop'; }
-    const deviceInfo = $('deviceInfo');
-    if (deviceInfo) {
-        const icons = { 'mobile': '📱 手机', 'tablet': '📱 平板', 'desktop': '🖥️ 桌面' };
-        deviceInfo.textContent = icons[deviceType] || '🖥️ 桌面';
-    }
-    applyUIMode();
-    return deviceType;
-}
-
-function applyUIMode() {
-    const app = document.getElementById('app');
-    if (!app) return;
-    const mode = uiMode === 'auto' ? getAutoMode() : uiMode;
-    app.classList.remove('wechat-style');
-    if (mode === 'wechat') { app.classList.add('wechat-style'); }
-    const statusEl = $('uiModeStatus');
-    if (statusEl) {
-        const labels = { 'auto': '自动 (' + getAutoMode() + ')', 'default': '默认', 'wechat': '微信风格' };
-        statusEl.textContent = labels[mode] || '自动';
-    }
-}
-
-function getAutoMode() {
-    if (deviceType === 'mobile' || deviceType === 'tablet') { return 'wechat'; }
-    return 'default';
-}
-
-function toggleUIMode() {
-    const modes = ['auto', 'default', 'wechat'];
-    const currentIndex = modes.indexOf(uiMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    uiMode = modes[nextIndex];
-    localStorage.setItem('ui_mode', uiMode);
-    applyUIMode();
-    showToast('UI模式: ' + uiMode, 'info');
-}
-
-function loadUIMode() {
-    const saved = localStorage.getItem('ui_mode');
-    if (saved && ['auto', 'default', 'wechat'].includes(saved)) { uiMode = saved; }
-    else { uiMode = 'auto'; }
-}
-
 function toggleTheme() {
     const html = document.documentElement;
     const current = html.getAttribute('data-theme') || 'light';
@@ -808,7 +859,7 @@ document.addEventListener('visibilitychange', function() {
     if (document.hidden) { updateUserStatus('offline'); }
     else {
         updateUserStatus('online');
-        if (isLoggedIn && currentChat) { loadLocalMessages(currentChat.id); }
+        if (isLoggedIn && currentChat) { loadChatHistory(currentChat.id); }
     }
 });
 
@@ -819,14 +870,6 @@ window.addEventListener('beforeunload', function() { updateUserStatus('offline')
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
-    loadUIMode();
-    detectDevice();
-
-    let resizeTimer;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(detectDevice, 300);
-    });
 
     const sendBtn = $('sendBtn');
     const messageInput = $('messageInput');
@@ -874,9 +917,11 @@ window.closeQR = closeQR;
 window.copyUserId = copyUserId;
 window.sendMessage = sendMessage;
 window.toggleTheme = toggleTheme;
-window.toggleUIMode = toggleUIMode;
 window.loadSystemChat = loadSystemChat;
 window.selectChatById = selectChatById;
+window.switchToPhone = switchToPhone;
+window.switchToDesktop = switchToDesktop;
+window.closeChat = closeChat;
 
 // ============================================================
 // 初始化
@@ -905,6 +950,111 @@ function init() {
         }
     }
 }
+
+// ============================================================
+// 手机版视图切换
+// ============================================================
+
+function switchToChatView(chatId) {
+    // 隐藏主界面，显示聊天详情
+    const mainView = document.getElementById('mainView');
+    const chatView = document.getElementById('chatView');
+    if (mainView) mainView.classList.remove('active');
+    if (chatView) chatView.classList.add('active');
+    
+    // 如果有 chatId，自动选择对应聊天
+    if (chatId) {
+        const chat = chatList.find(c => String(c.id) === String(chatId));
+        if (chat) {
+            selectChat(chat);
+        }
+    }
+}
+
+function closeChat() {
+    // 返回主界面
+    const mainView = document.getElementById('mainView');
+    const chatView = document.getElementById('chatView');
+    if (mainView) mainView.classList.add('active');
+    if (chatView) chatView.classList.remove('active');
+}
+
+// 重写 selectChat 函数以支持手机版
+const originalSelectChat = selectChat;
+selectChat = function(chat) {
+    if (!chat) return;
+    currentChat = chat;
+    
+    if (chat.type !== 'system') { clearUnread(chat.id); }
+    
+    // 判断是否为手机版
+    const isPhone = window.location.pathname.includes('phone.html');
+    
+    if (isPhone) {
+        // 手机版：切换到聊天视图
+        const chatView = document.getElementById('chatView');
+        if (chatView) {
+            document.getElementById('mainView').classList.remove('active');
+            chatView.classList.add('active');
+        }
+        // 更新标题
+        const name = chat.display_name || chat.username || '用户';
+        const chatName = document.getElementById('chatName');
+        if (chatName) chatName.textContent = name;
+    } else {
+        // 桌面版：正常渲染
+        renderChatList();
+        const emptyState = document.getElementById('emptyState');
+        const chatHeader = document.getElementById('chatHeader');
+        const chatInput = document.getElementById('chatInput');
+        if (emptyState) emptyState.style.display = 'none';
+        if (chatHeader) chatHeader.style.display = 'flex';
+        if (chatInput) chatInput.style.display = 'block';
+        const name = chat.display_name || chat.username || '用户';
+        const chatNameEl = document.getElementById('chatName');
+        const chatStatus = document.getElementById('chatStatus');
+        if (chatNameEl) chatNameEl.textContent = name;
+        if (chatStatus) chatStatus.textContent = '在线';
+    }
+    
+    // 加载消息
+    if (chat.type === 'system' || chat.id === 'system') {
+        loadSystemChat();
+    } else {
+        loadChatHistory(chat.id);
+    }
+    scrollToBottom();
+};
+
+// 重写 selectChatById
+selectChatById = function(id) {
+    const chat = chatList.find(c => String(c.id) === String(id));
+    if (chat) selectChat(chat);
+};
+
+// 重写 closeChat 暴露到全局
+window.closeChat = closeChat;
+
+// 手机版点击聊天项时切换视图
+document.addEventListener('DOMContentLoaded', function() {
+    // 检测是否手机版，绑定点击事件
+    if (window.location.pathname.includes('phone.html')) {
+        // 聊天列表点击由 onclick 处理
+        // 额外处理：点击聊天项时切换到聊天视图
+        const chatList = document.getElementById('chatList');
+        if (chatList) {
+            chatList.addEventListener('click', function(e) {
+                const item = e.target.closest('.chat-item');
+                if (item) {
+                    const id = item.dataset.id;
+                    if (id) {
+                        switchToChatView(id);
+                    }
+                }
+            });
+        }
+    }
+});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
