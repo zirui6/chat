@@ -823,15 +823,43 @@ function getUserFromURL() {
 }
 
 // ============================================================
-// 切换标签页（手机版）
+// 切换标签页（桌面版 + 手机版）
 // ============================================================
 function switchTab(tab) {
-    // 更新导航状态
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    console.log('切换标签:', tab);
+    
+    // 桌面版：切换侧边栏
+    if (!window.location.pathname.includes('phone.html')) {
+        // 更新功能栏按钮状态
+        document.querySelectorAll('.func-item[data-tab]').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        
+        // 切换侧边栏内容
+        const sidebarChat = document.getElementById('sidebarChat');
+        const sidebarFriends = document.getElementById('sidebarFriends');
+        const sidebarSettings = document.getElementById('sidebarSettings');
+        
+        if (sidebarChat) sidebarChat.style.display = tab === 'chat' ? 'flex' : 'none';
+        if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
+        if (sidebarSettings) sidebarSettings.style.display = tab === 'settings' ? 'flex' : 'none';
+        
+        // 如果是好友标签，加载好友列表
+        if (tab === 'friends') {
+            loadFriendList();
+        }
+        return;
+    }
+    
+    // 手机版：切换底部导航
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
     const target = document.querySelector(`.nav-item[data-tab="${tab}"]`);
     if (target) target.classList.add('active');
     
-    // 处理不同标签
     if (tab === 'chat') {
         // 回到主界面
         const mainView = document.getElementById('mainView');
@@ -843,28 +871,8 @@ function switchTab(tab) {
     } else if (tab === 'profile') {
         showToast('👤 个人中心开发中', 'info');
     } else if (tab === 'settings') {
-        // 跳转到设置（桌面版设置页面）
-        if (window.location.pathname.includes('phone.html')) {
-            showToast('⚙️ 设置功能请使用桌面版', 'info');
-        }
+        showToast('⚙️ 设置功能开发中', 'info');
     }
-}
-
-// ============================================================
-// 手机版视图切换
-// ============================================================
-function switchToChatView(chatId) {
-    const chat = chatList.find(c => String(c.id) === String(chatId));
-    if (chat) {
-        selectChat(chat);
-    }
-}
-
-function closeChat() {
-    const mainView = document.getElementById('mainView');
-    const chatView = document.getElementById('chatView');
-    if (mainView) mainView.classList.add('active');
-    if (chatView) chatView.classList.remove('active');
 }
 
 // ============================================================
