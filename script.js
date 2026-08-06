@@ -23,27 +23,6 @@ const AIRTABLE_CONFIG = {
 const $ = (id) => document.getElementById(id);
 
 // ============================================================
-// 禁用右键和快捷键
-// ============================================================
-document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
-document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.shiftKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); return false; }
-    if (e.key === 'F12') { e.preventDefault(); return false; }
-});
-
-// ============================================================
-// 页面切换
-// ============================================================
-function switchToPhone() {
-    window.location.href = 'phone.html' + window.location.search;
-}
-function switchToDesktop() {
-    window.location.href = 'index.html' + window.location.search;
-}
-
-// ============================================================
 // Toast
 // ============================================================
 let toastTimer = null;
@@ -80,6 +59,26 @@ function formatTime(dateStr) {
 function getInitials(name) {
     if (!name) return 'U';
     return name.charAt(0).toUpperCase();
+}
+
+// ============================================================
+// 页面切换
+// ============================================================
+function switchToPhone() {
+    window.location.href = 'phone.html' + window.location.search;
+}
+function switchToDesktop() {
+    window.location.href = 'index.html' + window.location.search;
+}
+
+// ============================================================
+// 登录管理
+// ============================================================
+function goToLogin() {
+    window.location.href = CONFIG.WEBSITE + '/user.html?redirect=' + encodeURIComponent(window.location.href);
+}
+function goToTest() {
+    window.location.href = 'test.html';
 }
 
 // ============================================================
@@ -124,71 +123,6 @@ function updateTotalBadge() {
 }
 
 // ============================================================
-// 登录日志管理
-// ============================================================
-async function logLogin(user) {
-    if (!user) return;
-    try {
-        await fetch(CONFIG.SUPABASE_URL + '/rest/v1/login_logs', {
-            method: 'POST',
-            headers: {
-                'apikey': CONFIG.SUPABASE_ANON_KEY,
-                'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
-            },
-            body: JSON.stringify({
-                user_id: user.id,
-                username: user.username || user.display_name || '用户',
-                login_time: new Date().toISOString(),
-                status: 'online',
-                user_agent: navigator.userAgent || ''
-            })
-        });
-        console.log('✅ 登录日志已记录');
-    } catch (error) {
-        console.error('记录登录日志失败:', error);
-    }
-}
-
-async function logLogout(user) {
-    if (!user) return;
-    try {
-        // 更新最新的一条日志
-        const response = await fetch(
-            CONFIG.SUPABASE_URL + `/rest/v1/login_logs?user_id=eq.${encodeURIComponent(user.id)}&order=login_time.desc&limit=1`,
-            {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
-                }
-            }
-        );
-        if (response.ok) {
-            const data = await response.json();
-            if (data && data.length > 0) {
-                const logId = data[0].id;
-                await fetch(CONFIG.SUPABASE_URL + `/rest/v1/login_logs?id=eq.${logId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        logout_time: new Date().toISOString(),
-                        status: 'offline'
-                    })
-                });
-                console.log('✅ 登出日志已更新');
-            }
-        }
-    } catch (error) {
-        console.error('更新登出日志失败:', error);
-    }
-}
-
-// ============================================================
 // 在线状态管理
 // ============================================================
 async function updateUserStatus(status) {
@@ -209,14 +143,10 @@ async function updateUserStatus(status) {
                 updated_at: new Date().toISOString()
             })
         });
-        // 更新顶栏状态
         updateOnlineStatus(status);
-    } catch (error) {
-        console.error('更新状态失败:', error);
-    }
+    } catch (error) { console.error('更新状态失败:', error); }
 }
 
-// 更新顶栏在线状态
 function updateOnlineStatus(status) {
     const statusDot = document.getElementById('onlineStatusDot');
     const statusText = document.getElementById('onlineStatusText');
@@ -224,11 +154,7 @@ function updateOnlineStatus(status) {
         statusDot.className = 'online-dot ' + status;
     }
     if (statusText) {
-        const labels = {
-            'online': '在线',
-            'offline': '离线',
-            'away': '离开'
-        };
+        const labels = { 'online': '在线', 'offline': '离线', 'away': '离开' };
         statusText.textContent = labels[status] || '在线';
     }
 }
@@ -252,70 +178,67 @@ async function getUsersStatus(userIds) {
 }
 
 // ============================================================
-// 登录管理
+// 登录日志
 // ============================================================
-function goToLogin() {
-    window.location.href = CONFIG.WEBSITE + '/user.html?redirect=' + encodeURIComponent(window.location.href);
-}
-function goToTest() {
-    window.location.href = 'test.html';
+async function logLogin(user) {
+    if (!user) return;
+    try {
+        await fetch(CONFIG.SUPABASE_URL + '/rest/v1/login_logs', {
+            method: 'POST',
+            headers: {
+                'apikey': CONFIG.SUPABASE_ANON_KEY,
+                'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                user_id: user.id,
+                username: user.username || user.display_name || '用户',
+                login_time: new Date().toISOString(),
+                status: 'online',
+                user_agent: navigator.userAgent || ''
+            })
+        });
+        console.log('✅ 登录日志已记录');
+    } catch (error) { console.error('记录登录日志失败:', error); }
 }
 
+async function logLogout(user) {
+    if (!user) return;
+    try {
+        const response = await fetch(
+            CONFIG.SUPABASE_URL + `/rest/v1/login_logs?user_id=eq.${encodeURIComponent(user.id)}&order=login_time.desc&limit=1`,
+            { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
+        );
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const logId = data[0].id;
+                await fetch(CONFIG.SUPABASE_URL + `/rest/v1/login_logs?id=eq.${logId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': CONFIG.SUPABASE_ANON_KEY,
+                        'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        logout_time: new Date().toISOString(),
+                        status: 'offline'
+                    })
+                });
+                console.log('✅ 登出日志已更新');
+            }
+        }
+    } catch (error) { console.error('更新登出日志失败:', error); }
+}
+
+// ============================================================
+// 全局状态
+// ============================================================
 let currentUser = null;
 let isLoggedIn = false;
 let pollingInterval = null;
 let lastMessageId = {};
-
-function checkLoginStatus() {
-    const user = getLocalUser();
-    if (user && user.id) {
-        currentUser = user;
-        isLoggedIn = true;
-        const overlay = $('loginOverlay');
-        if (overlay) overlay.classList.remove('show');
-        updateUIForLoggedIn();
-        return true;
-    }
-    isLoggedIn = false;
-    currentUser = null;
-    const overlay = $('loginOverlay');
-    if (overlay) overlay.classList.add('show');
-    updateUIForGuest();
-    return false;
-}
-
-// ============================================================
-// UI 更新
-// ============================================================
-function updateUIForLoggedIn() {
-    if (!currentUser) return;
-    const avatar = $('myAvatar');
-    if (avatar) { avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg'; }
-    // 记录登录日志
-    logLogin(currentUser);
-    updateUserStatus('online');
-    loadChats();
-    startPolling();
-}
-
-function updateUIForGuest() {
-    const list = $('chatList');
-    if (list) {
-        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">🔒</div><p>请先登录</p></div>`;
-    }
-    const chatInput = $('chatInput');
-    const chatHeader = $('chatHeader');
-    const emptyState = $('emptyState');
-    const messageList = $('messageList');
-    if (chatInput) chatInput.style.display = 'none';
-    if (chatHeader) chatHeader.style.display = 'none';
-    if (emptyState) emptyState.style.display = 'flex';
-    if (messageList) messageList.innerHTML = '';
-}
-
-// ============================================================
-// 消息相关
-// ============================================================
 let messages = [];
 let currentChat = null;
 let chatList = [];
@@ -327,7 +250,7 @@ const DEFAULT_CONTACTS = [
 ];
 
 // ============================================================
-// Airtable API 调用
+// Airtable
 // ============================================================
 async function fetchAirtableData() {
     try {
@@ -373,7 +296,56 @@ async function loadSystemMessages() {
 }
 
 // ============================================================
-// 加载聊天列表（从 Supabase 读取）
+// 检查登录状态
+// ============================================================
+function checkLoginStatus() {
+    const user = getLocalUser();
+    if (user && user.id) {
+        currentUser = user;
+        isLoggedIn = true;
+        const overlay = $('loginOverlay');
+        if (overlay) overlay.classList.remove('show');
+        updateUIForLoggedIn();
+        return true;
+    }
+    isLoggedIn = false;
+    currentUser = null;
+    const overlay = $('loginOverlay');
+    if (overlay) overlay.classList.add('show');
+    updateUIForGuest();
+    return false;
+}
+
+// ============================================================
+// UI 更新
+// ============================================================
+function updateUIForLoggedIn() {
+    if (!currentUser) return;
+    const avatar = $('myAvatar');
+    if (avatar) { avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg'; }
+    logLogin(currentUser);
+    updateUserStatus('online');
+    loadChats();
+    startPolling();
+}
+
+function updateUIForGuest() {
+    const list = $('chatList');
+    if (list) {
+        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">🔒</div><p>请先登录</p></div>`;
+    }
+    const chatInput = $('chatInput');
+    const chatHeader = $('chatHeader');
+    const emptyState = $('emptyState');
+    const messageList = $('messageList');
+    if (chatInput) chatInput.style.display = 'none';
+    if (chatHeader) chatHeader.style.display = 'none';
+    if (emptyState) emptyState.style.display = 'flex';
+    if (messageList) messageList.innerHTML = '';
+}
+
+// ============================================================
+// 加载聊天列表
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
@@ -385,7 +357,6 @@ async function loadChats() {
         let userChats = [];
         if (response.ok) {
             const data = await response.json();
-            // 过滤当前用户参与的消息
             const filtered = data.filter(msg => {
                 if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
                 if (msg.receiver_id === currentUser.id) return true;
@@ -393,7 +364,6 @@ async function loadChats() {
                 if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
                 return false;
             });
-            // 按发送者分组
             const grouped = {};
             filtered.forEach(msg => {
                 const key = msg.sender_id || 'unknown';
@@ -483,7 +453,7 @@ function renderChatList() {
 }
 
 // ============================================================
-// 选择聊天 - 从 Supabase 加载历史消息
+// 选择聊天
 // ============================================================
 function selectChat(chat) {
     if (!chat) return;
@@ -491,7 +461,7 @@ function selectChat(chat) {
 
     if (chat.type !== 'system') { clearUnread(chat.id); }
 
-    // 桌面版渲染
+    // 桌面版
     if (!window.location.pathname.includes('phone.html')) {
         renderChatList();
         const emptyState = $('emptyState');
@@ -516,7 +486,6 @@ function selectChat(chat) {
         if (chatName) chatName.textContent = name;
     }
 
-    // 加载消息（从 Supabase）
     if (chat.type === 'system' || chat.id === 'system') {
         loadSystemChat();
     } else {
@@ -531,7 +500,7 @@ function selectChatById(id) {
 }
 
 // ============================================================
-// 从 Supabase 加载聊天历史
+// 加载聊天历史
 // ============================================================
 async function loadChatHistory(chatId) {
     const list = $('messageList');
@@ -541,17 +510,11 @@ async function loadChatHistory(chatId) {
     try {
         const response = await fetch(
             CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=500`,
-            {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
-                }
-            }
+            { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
         );
 
         if (response.ok) {
             const data = await response.json();
-            // 过滤出与当前聊天的消息
             const filtered = data.filter(msg => {
                 if (chatId === 'public') {
                     return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
@@ -559,7 +522,6 @@ async function loadChatHistory(chatId) {
                 if (chatId === '-1') {
                     return msg.receiver_id === '-1' || msg.sender_id === '-1';
                 }
-                // 私聊：发送者是对方 或 接收者是对方 或 自己发的
                 return msg.sender_id === chatId || msg.receiver_id === chatId || msg.sender_id === currentUser.id;
             });
 
@@ -570,7 +532,6 @@ async function loadChatHistory(chatId) {
             } else {
                 messages = [];
                 renderMessages();
-                // 公共频道欢迎消息
                 if (chatId === 'public') {
                     messages.push({
                         id: Date.now(),
@@ -617,7 +578,7 @@ async function loadSystemChat() {
 }
 
 // ============================================================
-// 本地消息存储（缓存）
+// 本地消息存储
 // ============================================================
 function loadLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
@@ -629,7 +590,7 @@ function saveLocalMessages(chatId) {
 }
 
 // ============================================================
-// 渲染消息 - 显示头像+昵称+内容
+// 渲染消息
 // ============================================================
 function renderMessages() {
     const list = $('messageList');
@@ -642,7 +603,6 @@ function renderMessages() {
 
     let html = '';
     messages.forEach(msg => {
-        // 系统公告文章
         if (msg.is_system && msg.is_article) {
             html += renderArticleMessage(msg);
             return;
@@ -673,9 +633,6 @@ function renderMessages() {
     scrollToBottom();
 }
 
-// ============================================================
-// 渲染文章消息
-// ============================================================
 function renderArticleMessage(msg) {
     const time = formatTime(msg.publish_date || msg.created_at);
     const imageHtml = msg.image_url ? `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')"><img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" /></div>` : '';
@@ -756,7 +713,7 @@ async function sendMessage() {
 }
 
 // ============================================================
-// 轮询（自动刷新 + 未读计数）
+// 轮询
 // ============================================================
 function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
@@ -823,21 +780,19 @@ function getUserFromURL() {
 }
 
 // ============================================================
-// 切换标签页（桌面版 + 手机版）
+// 切换标签页
 // ============================================================
 function switchTab(tab) {
     console.log('切换标签:', tab);
     
-    // 桌面版：切换侧边栏
+    // 桌面版
     if (!window.location.pathname.includes('phone.html')) {
-        // 更新功能栏按钮状态
         document.querySelectorAll('.func-item[data-tab]').forEach(btn => {
             btn.classList.remove('active');
         });
         const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
         if (activeBtn) activeBtn.classList.add('active');
         
-        // 切换侧边栏内容
         const sidebarChat = document.getElementById('sidebarChat');
         const sidebarFriends = document.getElementById('sidebarFriends');
         const sidebarSettings = document.getElementById('sidebarSettings');
@@ -846,14 +801,11 @@ function switchTab(tab) {
         if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
         if (sidebarSettings) sidebarSettings.style.display = tab === 'settings' ? 'flex' : 'none';
         
-        // 如果是好友标签，加载好友列表
-        if (tab === 'friends') {
-            loadFriendList();
-        }
+        if (tab === 'friends') { loadFriendList(); }
         return;
     }
     
-    // 手机版：切换底部导航
+    // 手机版
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
     });
@@ -861,7 +813,6 @@ function switchTab(tab) {
     if (target) target.classList.add('active');
     
     if (tab === 'chat') {
-        // 回到主界面
         const mainView = document.getElementById('mainView');
         const chatView = document.getElementById('chatView');
         if (mainView) mainView.classList.add('active');
@@ -871,12 +822,37 @@ function switchTab(tab) {
     } else if (tab === 'profile') {
         showToast('👤 个人中心开发中', 'info');
     } else if (tab === 'settings') {
-        showToast('⚙️ 设置功能开发中', 'info');
+        showToast('⚙️ 请使用桌面版进行设置', 'info');
     }
 }
 
 // ============================================================
-// 添加好友
+// 手机版视图切换
+// ============================================================
+function closeChat() {
+    console.log('📱 关闭聊天');
+    const mainView = document.getElementById('mainView');
+    const chatView = document.getElementById('chatView');
+    if (mainView) mainView.classList.add('active');
+    if (chatView) chatView.classList.remove('active');
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.add('hidden');
+}
+
+function switchToChatView(chatId) {
+    console.log('📱 切换到聊天:', chatId);
+    const mainView = document.getElementById('mainView');
+    const chatView = document.getElementById('chatView');
+    if (mainView) mainView.classList.remove('active');
+    if (chatView) chatView.classList.add('active');
+    if (chatId) {
+        const chat = chatList.find(c => String(c.id) === String(chatId));
+        if (chat) selectChat(chat);
+    }
+}
+
+// ============================================================
+// 好友功能
 // ============================================================
 function openAddFriend() { $('addFriendModal').classList.add('show'); $('addFriendInput').focus(); }
 function closeAddFriend() {
@@ -885,12 +861,16 @@ function closeAddFriend() {
     $('addFriendMsg').value = '';
     $('searchResults').innerHTML = '';
 }
-
 function searchAndAddFriend() {
     const input = $('addFriendInput');
     const keyword = input.value.trim();
     if (!keyword) { showToast('请输入用户ID或用户名', 'warning'); return; }
     showToast('🔍 搜索功能开发中', 'info');
+}
+function loadFriendList() {
+    const list = $('friendList');
+    if (!list) return;
+    list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>好友功能开发中</p><p style="font-size:12px;">点击 ➕ 添加好友</p></div>`;
 }
 
 // ============================================================
@@ -937,7 +917,6 @@ function openQR() {
     if (userIdEl && currentUser) { userIdEl.textContent = currentUser.id || '-'; }
 }
 function closeQR() { $('qrModal').classList.remove('show'); }
-
 function copyUserId() {
     if (currentUser && currentUser.id) {
         const id = String(currentUser.id);
@@ -996,6 +975,34 @@ window.addEventListener('beforeunload', function() {
 });
 
 // ============================================================
+// 初始化
+// ============================================================
+function init() {
+    console.log('🚀 梓睿聊天启动');
+
+    const urlUser = getUserFromURL();
+    if (urlUser) {
+        console.log('✅ 从 URL 获取用户:', urlUser.username);
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    const loggedIn = checkLoginStatus();
+    if (loggedIn) {
+        console.log('✅ 已登录:', currentUser?.username);
+    } else {
+        console.log('👤 未登录');
+        const user = getLocalUser();
+        if (user && user.id) {
+            currentUser = user;
+            isLoggedIn = true;
+            const overlay = $('loginOverlay');
+            if (overlay) overlay.classList.remove('show');
+            updateUIForLoggedIn();
+        }
+    }
+}
+
+// ============================================================
 // 事件绑定
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
@@ -1032,9 +1039,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 手机版：聊天列表点击切换视图
     if (window.location.pathname.includes('phone.html')) {
-        const chatList = document.getElementById('chatList');
-        if (chatList) {
-            chatList.addEventListener('click', function(e) {
+        const chatListEl = document.getElementById('chatList');
+        if (chatListEl) {
+            chatListEl.addEventListener('click', function(e) {
                 const item = e.target.closest('.chat-item');
                 if (item) {
                     const id = item.dataset.id;
@@ -1047,7 +1054,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// ============================================================
 // 暴露全局函数
+// ============================================================
 window.goToLogin = goToLogin;
 window.goToTest = goToTest;
 window.switchTab = switchTab;
@@ -1066,35 +1075,9 @@ window.toggleTheme = toggleTheme;
 window.selectChatById = selectChatById;
 window.closeChat = closeChat;
 window.switchToChatView = switchToChatView;
+window.loadSystemChat = loadSystemChat;
 
-// ============================================================
-// 初始化
-// ============================================================
-function init() {
-    console.log('🚀 梓睿聊天启动');
-
-    const urlUser = getUserFromURL();
-    if (urlUser) {
-        console.log('✅ 从 URL 获取用户:', urlUser.username);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    const loggedIn = checkLoginStatus();
-    if (loggedIn) {
-        console.log('✅ 已登录:', currentUser?.username);
-    } else {
-        console.log('👤 未登录');
-        const user = getLocalUser();
-        if (user && user.id) {
-            currentUser = user;
-            isLoggedIn = true;
-            const overlay = $('loginOverlay');
-            if (overlay) overlay.classList.remove('show');
-            updateUIForLoggedIn();
-        }
-    }
-}
-
+// 启动
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
