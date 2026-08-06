@@ -156,6 +156,24 @@
             </div>
         </div>
 
+<!-- 聊天头部 -->
+<div class="chat-header" id="chatHeader" style="display:none;">
+    <div class="chat-header-left">
+        <div class="user-info">
+            <span class="online-dot online" id="onlineStatusDot"></span>
+            <div>
+                <div class="name" id="chatName">用户</div>
+                <div class="status" id="chatStatus">
+                    <span id="onlineStatusText">在线</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="chat-header-right">
+        <button class="btn-icon" onclick="showToast('更多功能', 'info')">⋯</button>
+    </div>
+</div>
+
         <!-- ===== 聊天窗口 ===== -->
         <div class="chat-window" id="chatWindow">
             <div class="empty-state" id="emptyState">

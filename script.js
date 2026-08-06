@@ -34,7 +34,7 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ============================================================
-// 页面切换函数
+// 页面切换
 // ============================================================
 function switchToPhone() {
     window.location.href = 'phone.html' + window.location.search;
@@ -124,6 +124,71 @@ function updateTotalBadge() {
 }
 
 // ============================================================
+// 登录日志管理
+// ============================================================
+async function logLogin(user) {
+    if (!user) return;
+    try {
+        await fetch(CONFIG.SUPABASE_URL + '/rest/v1/login_logs', {
+            method: 'POST',
+            headers: {
+                'apikey': CONFIG.SUPABASE_ANON_KEY,
+                'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                user_id: user.id,
+                username: user.username || user.display_name || '用户',
+                login_time: new Date().toISOString(),
+                status: 'online',
+                user_agent: navigator.userAgent || ''
+            })
+        });
+        console.log('✅ 登录日志已记录');
+    } catch (error) {
+        console.error('记录登录日志失败:', error);
+    }
+}
+
+async function logLogout(user) {
+    if (!user) return;
+    try {
+        // 更新最新的一条日志
+        const response = await fetch(
+            CONFIG.SUPABASE_URL + `/rest/v1/login_logs?user_id=eq.${encodeURIComponent(user.id)}&order=login_time.desc&limit=1`,
+            {
+                headers: {
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY
+                }
+            }
+        );
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const logId = data[0].id;
+                await fetch(CONFIG.SUPABASE_URL + `/rest/v1/login_logs?id=eq.${logId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': CONFIG.SUPABASE_ANON_KEY,
+                        'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        logout_time: new Date().toISOString(),
+                        status: 'offline'
+                    })
+                });
+                console.log('✅ 登出日志已更新');
+            }
+        }
+    } catch (error) {
+        console.error('更新登出日志失败:', error);
+    }
+}
+
+// ============================================================
 // 在线状态管理
 // ============================================================
 async function updateUserStatus(status) {
@@ -144,7 +209,28 @@ async function updateUserStatus(status) {
                 updated_at: new Date().toISOString()
             })
         });
-    } catch (error) { console.error('更新状态失败:', error); }
+        // 更新顶栏状态
+        updateOnlineStatus(status);
+    } catch (error) {
+        console.error('更新状态失败:', error);
+    }
+}
+
+// 更新顶栏在线状态
+function updateOnlineStatus(status) {
+    const statusDot = document.getElementById('onlineStatusDot');
+    const statusText = document.getElementById('onlineStatusText');
+    if (statusDot) {
+        statusDot.className = 'online-dot ' + status;
+    }
+    if (statusText) {
+        const labels = {
+            'online': '在线',
+            'offline': '离线',
+            'away': '离开'
+        };
+        statusText.textContent = labels[status] || '在线';
+    }
 }
 
 async function getUsersStatus(userIds) {
@@ -205,6 +291,8 @@ function updateUIForLoggedIn() {
     if (!currentUser) return;
     const avatar = $('myAvatar');
     if (avatar) { avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg'; }
+    // 记录登录日志
+    logLogin(currentUser);
     updateUserStatus('online');
     loadChats();
     startPolling();
@@ -285,7 +373,7 @@ async function loadSystemMessages() {
 }
 
 // ============================================================
-// 加载聊天列表
+// 加载聊天列表（从 Supabase 读取）
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
@@ -297,7 +385,7 @@ async function loadChats() {
         let userChats = [];
         if (response.ok) {
             const data = await response.json();
-            // 过滤出当前用户参与的消息
+            // 过滤当前用户参与的消息
             const filtered = data.filter(msg => {
                 if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
                 if (msg.receiver_id === currentUser.id) return true;
@@ -395,7 +483,7 @@ function renderChatList() {
 }
 
 // ============================================================
-// 选择聊天 - 从数据库加载历史消息
+// 选择聊天 - 从 Supabase 加载历史消息
 // ============================================================
 function selectChat(chat) {
     if (!chat) return;
@@ -403,33 +491,38 @@ function selectChat(chat) {
 
     if (chat.type !== 'system') { clearUnread(chat.id); }
 
-    renderChatList();
+    // 桌面版渲染
+    if (!window.location.pathname.includes('phone.html')) {
+        renderChatList();
+        const emptyState = $('emptyState');
+        const chatHeader = $('chatHeader');
+        const chatInput = $('chatInput');
+        if (emptyState) emptyState.style.display = 'none';
+        if (chatHeader) chatHeader.style.display = 'flex';
+        if (chatInput) chatInput.style.display = 'block';
+        const name = chat.display_name || chat.username || '用户';
+        const chatName = $('chatName');
+        const chatStatus = $('chatStatus');
+        if (chatName) chatName.textContent = name;
+        if (chatStatus) chatStatus.textContent = '在线';
+    } else {
+        // 手机版：切换到聊天视图
+        const mainView = document.getElementById('mainView');
+        const chatView = document.getElementById('chatView');
+        if (mainView) mainView.classList.remove('active');
+        if (chatView) chatView.classList.add('active');
+        const name = chat.display_name || chat.username || '用户';
+        const chatName = document.getElementById('chatName');
+        if (chatName) chatName.textContent = name;
+    }
 
-    const emptyState = $('emptyState');
-    const chatHeader = $('chatHeader');
-    const chatInput = $('chatInput');
-    if (emptyState) emptyState.style.display = 'none';
-    if (chatHeader) chatHeader.style.display = 'flex';
-    if (chatInput) chatInput.style.display = 'block';
-
-    const name = chat.display_name || chat.username || '用户';
-    const chatName = $('chatName');
-    const chatStatus = $('chatStatus');
-    if (chatName) chatName.textContent = name;
-    if (chatStatus) chatStatus.textContent = '在线';
-
-    // 从数据库加载历史消息
+    // 加载消息（从 Supabase）
     if (chat.type === 'system' || chat.id === 'system') {
         loadSystemChat();
     } else {
         loadChatHistory(chat.id);
     }
     scrollToBottom();
-
-    if (window.innerWidth <= 768) {
-        const sidebar = $('sidebar');
-        if (sidebar) sidebar.classList.add('hidden');
-    }
 }
 
 function selectChatById(id) {
@@ -438,7 +531,7 @@ function selectChatById(id) {
 }
 
 // ============================================================
-// 从数据库加载聊天历史
+// 从 Supabase 加载聊天历史
 // ============================================================
 async function loadChatHistory(chatId) {
     const list = $('messageList');
@@ -446,9 +539,8 @@ async function loadChatHistory(chatId) {
     list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载历史消息...</div>';
 
     try {
-        // 查询与该用户相关的所有消息
         const response = await fetch(
-            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=200`,
+            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=500`,
             {
                 headers: {
                     'apikey': CONFIG.SUPABASE_ANON_KEY,
@@ -461,28 +553,24 @@ async function loadChatHistory(chatId) {
             const data = await response.json();
             // 过滤出与当前聊天的消息
             const filtered = data.filter(msg => {
-                // 公共频道消息
                 if (chatId === 'public') {
                     return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
                 }
-                // 文件传输助手
                 if (chatId === '-1') {
                     return msg.receiver_id === '-1' || msg.sender_id === '-1';
                 }
-                // 私聊：发送者是对方 或 接收者是对方
-                return msg.sender_id === chatId || msg.receiver_id === chatId;
+                // 私聊：发送者是对方 或 接收者是对方 或 自己发的
+                return msg.sender_id === chatId || msg.receiver_id === chatId || msg.sender_id === currentUser.id;
             });
 
             if (filtered.length > 0) {
                 messages = filtered;
-                // 保存到本地缓存
                 saveLocalMessages(chatId);
                 renderMessages();
             } else {
-                // 没有历史消息
                 messages = [];
                 renderMessages();
-                // 添加欢迎消息
+                // 公共频道欢迎消息
                 if (chatId === 'public') {
                     messages.push({
                         id: Date.now(),
@@ -497,7 +585,6 @@ async function loadChatHistory(chatId) {
                 }
             }
         } else {
-            // 加载失败，尝试从本地读取
             loadLocalMessages(chatId);
         }
     } catch (error) {
@@ -736,35 +823,59 @@ function getUserFromURL() {
 }
 
 // ============================================================
-// 切换标签页
+// 切换标签页（手机版）
 // ============================================================
 function switchTab(tab) {
-    document.querySelectorAll('.func-item[data-tab]').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
-    const sidebarChat = $('sidebarChat');
-    const sidebarFriends = $('sidebarFriends');
-    const sidebarSettings = $('sidebarSettings');
-    if (sidebarChat) sidebarChat.style.display = tab === 'chat' ? 'flex' : 'none';
-    if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
-    if (sidebarSettings) sidebarSettings.style.display = tab === 'settings' ? 'flex' : 'none';
+    // 更新导航状态
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const target = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+    if (target) target.classList.add('active');
+    
+    // 处理不同标签
+    if (tab === 'chat') {
+        // 回到主界面
+        const mainView = document.getElementById('mainView');
+        const chatView = document.getElementById('chatView');
+        if (mainView) mainView.classList.add('active');
+        if (chatView) chatView.classList.remove('active');
+    } else if (tab === 'friends') {
+        showToast('👥 通讯录功能开发中', 'info');
+    } else if (tab === 'profile') {
+        showToast('👤 个人中心开发中', 'info');
+    } else if (tab === 'settings') {
+        // 跳转到设置（桌面版设置页面）
+        if (window.location.pathname.includes('phone.html')) {
+            showToast('⚙️ 设置功能请使用桌面版', 'info');
+        }
+    }
 }
 
-function openSettings() { switchTab('settings'); }
-function openTest() { window.open('test.html', '_blank'); }
+// ============================================================
+// 手机版视图切换
+// ============================================================
+function switchToChatView(chatId) {
+    const chat = chatList.find(c => String(c.id) === String(chatId));
+    if (chat) {
+        selectChat(chat);
+    }
+}
 
+function closeChat() {
+    const mainView = document.getElementById('mainView');
+    const chatView = document.getElementById('chatView');
+    if (mainView) mainView.classList.add('active');
+    if (chatView) chatView.classList.remove('active');
+}
+
+// ============================================================
+// 添加好友
+// ============================================================
 function openAddFriend() { $('addFriendModal').classList.add('show'); $('addFriendInput').focus(); }
 function closeAddFriend() {
     $('addFriendModal').classList.remove('show');
     $('addFriendInput').value = '';
     $('addFriendMsg').value = '';
     $('searchResults').innerHTML = '';
-}
-
-function loadFriendList() {
-    const list = $('friendList');
-    if (!list) return;
-    list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>好友功能开发中</p><p style="font-size:12px;">点击 ➕ 添加好友</p></div>`;
 }
 
 function searchAndAddFriend() {
@@ -774,6 +885,9 @@ function searchAndAddFriend() {
     showToast('🔍 搜索功能开发中', 'info');
 }
 
+// ============================================================
+// 清除缓存
+// ============================================================
 function clearAllData() {
     if (confirm('确定要清除所有本地缓存数据吗？')) {
         const keys = Object.keys(localStorage);
@@ -786,8 +900,12 @@ function clearAllData() {
     }
 }
 
+// ============================================================
+// 退出登录
+// ============================================================
 function logout() {
     if (confirm('确定要退出登录吗？')) {
+        logLogout(currentUser);
         updateUserStatus('offline');
         localStorage.removeItem('chat_user_data');
         localStorage.removeItem('auth_token');
@@ -801,6 +919,9 @@ function logout() {
     }
 }
 
+// ============================================================
+// 二维码
+// ============================================================
 function openQR() {
     const modal = $('qrModal');
     const userIdEl = $('qrUserId');
@@ -824,11 +945,6 @@ function copyUserId() {
             showToast('✅ 用户ID已复制', 'success');
         }
     }
-}
-
-function closeChat() {
-    const sidebar = $('sidebar');
-    if (sidebar) sidebar.classList.remove('hidden');
 }
 
 // ============================================================
@@ -856,14 +972,20 @@ function loadTheme() {
 // 页面可见性监听
 // ============================================================
 document.addEventListener('visibilitychange', function() {
-    if (document.hidden) { updateUserStatus('offline'); }
-    else {
+    if (document.hidden) {
+        updateUserStatus('offline');
+    } else {
         updateUserStatus('online');
-        if (isLoggedIn && currentChat) { loadChatHistory(currentChat.id); }
+        if (isLoggedIn && currentChat) {
+            loadChatHistory(currentChat.id);
+        }
     }
 });
 
-window.addEventListener('beforeunload', function() { updateUserStatus('offline'); });
+window.addEventListener('beforeunload', function() {
+    logLogout(currentUser);
+    updateUserStatus('offline');
+});
 
 // ============================================================
 // 事件绑定
@@ -899,14 +1021,30 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     $('avatarBtn')?.addEventListener('click', openQR);
     $('copyIdBtn')?.addEventListener('click', copyUserId);
+
+    // 手机版：聊天列表点击切换视图
+    if (window.location.pathname.includes('phone.html')) {
+        const chatList = document.getElementById('chatList');
+        if (chatList) {
+            chatList.addEventListener('click', function(e) {
+                const item = e.target.closest('.chat-item');
+                if (item) {
+                    const id = item.dataset.id;
+                    if (id) {
+                        switchToChatView(id);
+                    }
+                }
+            });
+        }
+    }
 });
 
-// 暴露函数给 HTML
+// 暴露全局函数
 window.goToLogin = goToLogin;
 window.goToTest = goToTest;
 window.switchTab = switchTab;
-window.openSettings = openSettings;
-window.openTest = openTest;
+window.switchToPhone = switchToPhone;
+window.switchToDesktop = switchToDesktop;
 window.openAddFriend = openAddFriend;
 window.closeAddFriend = closeAddFriend;
 window.searchAndAddFriend = searchAndAddFriend;
@@ -917,11 +1055,9 @@ window.closeQR = closeQR;
 window.copyUserId = copyUserId;
 window.sendMessage = sendMessage;
 window.toggleTheme = toggleTheme;
-window.loadSystemChat = loadSystemChat;
 window.selectChatById = selectChatById;
-window.switchToPhone = switchToPhone;
-window.switchToDesktop = switchToDesktop;
 window.closeChat = closeChat;
+window.switchToChatView = switchToChatView;
 
 // ============================================================
 // 初始化
@@ -950,111 +1086,6 @@ function init() {
         }
     }
 }
-
-// ============================================================
-// 手机版视图切换
-// ============================================================
-
-function switchToChatView(chatId) {
-    // 隐藏主界面，显示聊天详情
-    const mainView = document.getElementById('mainView');
-    const chatView = document.getElementById('chatView');
-    if (mainView) mainView.classList.remove('active');
-    if (chatView) chatView.classList.add('active');
-    
-    // 如果有 chatId，自动选择对应聊天
-    if (chatId) {
-        const chat = chatList.find(c => String(c.id) === String(chatId));
-        if (chat) {
-            selectChat(chat);
-        }
-    }
-}
-
-function closeChat() {
-    // 返回主界面
-    const mainView = document.getElementById('mainView');
-    const chatView = document.getElementById('chatView');
-    if (mainView) mainView.classList.add('active');
-    if (chatView) chatView.classList.remove('active');
-}
-
-// 重写 selectChat 函数以支持手机版
-const originalSelectChat = selectChat;
-selectChat = function(chat) {
-    if (!chat) return;
-    currentChat = chat;
-    
-    if (chat.type !== 'system') { clearUnread(chat.id); }
-    
-    // 判断是否为手机版
-    const isPhone = window.location.pathname.includes('phone.html');
-    
-    if (isPhone) {
-        // 手机版：切换到聊天视图
-        const chatView = document.getElementById('chatView');
-        if (chatView) {
-            document.getElementById('mainView').classList.remove('active');
-            chatView.classList.add('active');
-        }
-        // 更新标题
-        const name = chat.display_name || chat.username || '用户';
-        const chatName = document.getElementById('chatName');
-        if (chatName) chatName.textContent = name;
-    } else {
-        // 桌面版：正常渲染
-        renderChatList();
-        const emptyState = document.getElementById('emptyState');
-        const chatHeader = document.getElementById('chatHeader');
-        const chatInput = document.getElementById('chatInput');
-        if (emptyState) emptyState.style.display = 'none';
-        if (chatHeader) chatHeader.style.display = 'flex';
-        if (chatInput) chatInput.style.display = 'block';
-        const name = chat.display_name || chat.username || '用户';
-        const chatNameEl = document.getElementById('chatName');
-        const chatStatus = document.getElementById('chatStatus');
-        if (chatNameEl) chatNameEl.textContent = name;
-        if (chatStatus) chatStatus.textContent = '在线';
-    }
-    
-    // 加载消息
-    if (chat.type === 'system' || chat.id === 'system') {
-        loadSystemChat();
-    } else {
-        loadChatHistory(chat.id);
-    }
-    scrollToBottom();
-};
-
-// 重写 selectChatById
-selectChatById = function(id) {
-    const chat = chatList.find(c => String(c.id) === String(id));
-    if (chat) selectChat(chat);
-};
-
-// 重写 closeChat 暴露到全局
-window.closeChat = closeChat;
-
-// 手机版点击聊天项时切换视图
-document.addEventListener('DOMContentLoaded', function() {
-    // 检测是否手机版，绑定点击事件
-    if (window.location.pathname.includes('phone.html')) {
-        // 聊天列表点击由 onclick 处理
-        // 额外处理：点击聊天项时切换到聊天视图
-        const chatList = document.getElementById('chatList');
-        if (chatList) {
-            chatList.addEventListener('click', function(e) {
-                const item = e.target.closest('.chat-item');
-                if (item) {
-                    const id = item.dataset.id;
-                    if (id) {
-                        switchToChatView(id);
-                    }
-                }
-            });
-        }
-    }
-});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
