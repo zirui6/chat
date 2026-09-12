@@ -1,5 +1,5 @@
 // ============================================================
-// 梓睿聊天 · 主逻辑（Supabase + Airtable）
+// 梓睿聊天 · 主逻辑 v3（微信风格 + Supabase Realtime 即时刷新）
 // ============================================================
 
 // ============================================================
@@ -9,6 +9,8 @@ const CONFIG = {
     SUPABASE_URL: 'https://uigzsxmkulephkfkiebj.supabase.co',
     SUPABASE_ANON_KEY: 'sb_publishable_OgyvGDiFuFAKKGYMmnq3GA_nXqIRCmW',
     WEBSITE: 'https://zirui6.github.io',
+    POLL_INTERVAL: 4000,          // 轮询兜底间隔（Realtime 不可用时）
+    HISTORY_LIMIT: 500,
 };
 
 const AIRTABLE_CONFIG = {
@@ -56,9 +58,27 @@ function formatTime(dateStr) {
     return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
 }
 
+// 微信式消息时间（间隔超过5分钟显示时间条）
+function formatMsgTime(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const hm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const diffDays = Math.floor((today - thatDay) / 86400000);
+    if (diffDays === 0) return hm;
+    if (diffDays === 1) return '昨天 ' + hm;
+    if (diffDays < 7) return d.toLocaleDateString('zh-CN', { weekday: 'long' }) + ' ' + hm;
+    return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + hm;
+}
+
 function getInitials(name) {
     if (!name) return 'U';
     return name.charAt(0).toUpperCase();
+}
+
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ============================================================
@@ -94,8 +114,7 @@ function setUnreadCount(chatId, count) {
 }
 function incrementUnread(chatId) {
     if (chatId === 'system' || chatId === 'public' || chatId === '-1') return;
-    const current = getUnreadCount(chatId);
-    setUnreadCount(chatId, current + 1);
+    setUnreadCount(chatId, getUnreadCount(chatId) + 1);
     updateTotalBadge();
 }
 function clearUnread(chatId) {
@@ -114,7 +133,7 @@ function updateTotalBadge() {
     if (badge) {
         if (total > 0) {
             badge.textContent = total > 99 ? '99+' : total;
-            badge.style.display = 'block';
+            badge.style.display = 'flex';
         } else {
             badge.style.display = 'none';
         }
@@ -148,11 +167,9 @@ async function updateUserStatus(status) {
 }
 
 function updateOnlineStatus(status) {
-    const statusDot = document.getElementById('onlineStatusDot');
     const statusText = document.getElementById('onlineStatusText');
-    if (statusDot) {
-        statusDot.className = 'online-dot ' + status;
-    }
+    const dot = document.getElementById('onlineStatusDot');
+    if (dot) dot.className = 'online-dot ' + status;
     if (statusText) {
         const labels = { 'online': '在线', 'offline': '离线', 'away': '离开' };
         statusText.textContent = labels[status] || '在线';
@@ -199,7 +216,6 @@ async function logLogin(user) {
                 user_agent: navigator.userAgent || ''
             })
         });
-        console.log('✅ 登录日志已记录');
     } catch (error) { console.error('记录登录日志失败:', error); }
 }
 
@@ -213,20 +229,15 @@ async function logLogout(user) {
         if (response.ok) {
             const data = await response.json();
             if (data && data.length > 0) {
-                const logId = data[0].id;
-                await fetch(CONFIG.SUPABASE_URL + `/rest/v1/login_logs?id=eq.${logId}`, {
+                await fetch(CONFIG.SUPABASE_URL + `/rest/v1/login_logs?id=eq.${data[0].id}`, {
                     method: 'PATCH',
                     headers: {
                         'apikey': CONFIG.SUPABASE_ANON_KEY,
                         'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        logout_time: new Date().toISOString(),
-                        status: 'offline'
-                    })
+                    body: JSON.stringify({ logout_time: new Date().toISOString(), status: 'offline' })
                 });
-                console.log('✅ 登出日志已更新');
             }
         }
     } catch (error) { console.error('更新登出日志失败:', error); }
@@ -238,10 +249,15 @@ async function logLogout(user) {
 let currentUser = null;
 let isLoggedIn = false;
 let pollingInterval = null;
-let lastMessageId = {};
-let messages = [];
+let realtimeChannel = null;
+let realtimeOk = false;
+let messages = [];                 // 当前会话消息（已按 id 去重）
+const knownMessageIds = new Set(); // 当前会话已知消息 id
 let currentChat = null;
 let chatList = [];
+let chatListVersion = 0;           // 渲染版本号，防止竞态覆盖
+
+const DEFAULT_AVATAR = 'https://zirui6.github.io/touxiang.jpg';
 
 const DEFAULT_CONTACTS = [
     { id: 'system', username: '系统服务', display_name: '📢 系统公告', avatar_url: 'https://zirui6.github.io/icon48.png', is_default: true, type: 'system' },
@@ -250,7 +266,7 @@ const DEFAULT_CONTACTS = [
 ];
 
 // ============================================================
-// Airtable
+// Airtable（系统公告）
 // ============================================================
 async function fetchAirtableData() {
     try {
@@ -258,10 +274,9 @@ async function fetchAirtableData() {
         const response = await fetch(url, {
             headers: { 'Authorization': 'Bearer ' + AIRTABLE_CONFIG.API_TOKEN, 'Content-Type': 'application/json' }
         });
-        if (!response.ok) { console.error('Airtable 错误:', response.status); return []; }
+        if (!response.ok) return [];
         const data = await response.json();
-        const records = data.records || [];
-        return records.map(record => {
+        return (data.records || []).map(record => {
             const fields = record.fields || {};
             return {
                 id: record.id,
@@ -272,27 +287,24 @@ async function fetchAirtableData() {
                 imageUrl: fields['附图链接'] || '',
             };
         }).sort((a, b) => new Date(b.publishDate) - new Date(a.publishDate));
-    } catch (error) { console.error('Airtable 错误:', error); return []; }
+    } catch (error) { return []; }
 }
 
 async function loadSystemMessages() {
-    try {
-        const items = await fetchAirtableData();
-        return items.map((item, index) => ({
-            id: 'system_' + (item.id || index),
-            sender_id: 'system',
-            sender_name: '系统服务',
-            content: item.title,
-            subtitle: item.subtitle,
-            publisher: item.publisher,
-            publish_date: item.publishDate,
-            image_url: item.imageUrl,
-            created_at: item.publishDate,
-            is_system: true,
-            is_article: true,
-            _raw: item
-        }));
-    } catch (error) { return []; }
+    const items = await fetchAirtableData();
+    return items.map((item, index) => ({
+        id: 'system_' + (item.id || index),
+        sender_id: 'system',
+        sender_name: '系统服务',
+        content: item.title,
+        subtitle: item.subtitle,
+        publisher: item.publisher,
+        publish_date: item.publishDate,
+        image_url: item.imageUrl,
+        created_at: item.publishDate,
+        is_system: true,
+        is_article: true
+    }));
 }
 
 // ============================================================
@@ -303,15 +315,13 @@ function checkLoginStatus() {
     if (user && user.id) {
         currentUser = user;
         isLoggedIn = true;
-        const overlay = $('loginOverlay');
-        if (overlay) overlay.classList.remove('show');
+        $('loginOverlay')?.classList.remove('show');
         updateUIForLoggedIn();
         return true;
     }
     isLoggedIn = false;
     currentUser = null;
-    const overlay = $('loginOverlay');
-    if (overlay) overlay.classList.add('show');
+    $('loginOverlay')?.classList.add('show');
     updateUIForGuest();
     return false;
 }
@@ -322,72 +332,67 @@ function checkLoginStatus() {
 function updateUIForLoggedIn() {
     if (!currentUser) return;
     const avatar = $('myAvatar');
-    if (avatar) { avatar.src = currentUser.avatar_url || 'https://zirui6.github.io/touxiang.jpg'; }
+    if (avatar) { avatar.src = currentUser.avatar_url || DEFAULT_AVATAR; }
     logLogin(currentUser);
     updateUserStatus('online');
     loadChats();
-    startPolling();
+    startRealtime();   // 优先 Realtime
+    startPolling();    // 轮询兜底（Realtime 不通时自动接管）
 }
 
 function updateUIForGuest() {
     const list = $('chatList');
     if (list) {
-        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">🔒</div><p>请先登录</p></div>`;
+        list.innerHTML = `<div class="sidebar-empty"><div class="empty-icon">🔒</div><p>请先登录</p></div>`;
     }
     const chatInput = $('chatInput');
     const chatHeader = $('chatHeader');
     const emptyState = $('emptyState');
-    const messageList = $('messageList');
     if (chatInput) chatInput.style.display = 'none';
     if (chatHeader) chatHeader.style.display = 'none';
     if (emptyState) emptyState.style.display = 'flex';
+    const messageList = $('messageList');
     if (messageList) messageList.innerHTML = '';
 }
 
 // ============================================================
-// 加载聊天列表 - 显示所有在 messages 表出现过的用户
+// 加载聊天列表
 // ============================================================
 async function loadChats() {
     if (!isLoggedIn) return;
+    const myVersion = ++chatListVersion;
     try {
-        const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=500', {
-            headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY }
-        });
+        const response = await fetch(
+            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.desc&limit=${CONFIG.HISTORY_LIMIT}`,
+            { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
+        );
 
         let userChats = [];
         if (response.ok) {
             const data = await response.json();
-            
-            // 提取所有出现过的用户（排除系统、公共、文件传输）
             const userSet = new Set();
             data.forEach(msg => {
                 if (msg.sender_id === 'system' || msg.receiver_id === 'system') return;
                 if (msg.receiver_id === 'public' || msg.receiver_id === 'null' || msg.receiver_id === null) return;
                 if (msg.sender_id === '-1' || msg.receiver_id === '-1') return;
                 if (msg.sender_id) userSet.add(msg.sender_id);
-                if (msg.receiver_id && msg.receiver_id !== 'null' && msg.receiver_id !== 'public') {
-                    userSet.add(msg.receiver_id);
-                }
+                if (msg.receiver_id) userSet.add(msg.receiver_id);
             });
 
-            // 构建用户列表
-            const userIds = Array.from(userSet);
-            userChats = userIds
+            userChats = Array.from(userSet)
                 .filter(id => id !== currentUser.id)
                 .map(id => {
-                    // 查找与该用户相关的最后一条消息
                     const msgs = data.filter(m =>
                         (m.sender_id === id && m.receiver_id === currentUser.id) ||
                         (m.sender_id === currentUser.id && m.receiver_id === id)
                     );
                     const lastMsg = msgs.length > 0 ? msgs[0] : null;
                     const anyMsg = lastMsg || data.find(m => m.sender_id === id);
-
                     return {
                         id: id,
                         username: anyMsg?.sender_name || '用户',
                         display_name: anyMsg?.sender_name || '用户',
-                        avatar_url: 'https://zirui6.github.io/touxiang.jpg',
+                        avatar_url: DEFAULT_AVATAR,
                         last_message: lastMsg?.content || '暂无消息',
                         last_time: lastMsg?.created_at || anyMsg?.created_at || new Date().toISOString(),
                         type: 'friend'
@@ -395,37 +400,31 @@ async function loadChats() {
                 });
         }
 
-        // 合并默认联系人（去重）
         const existingIds = new Set(userChats.map(c => c.id));
-        const defaultFiltered = DEFAULT_CONTACTS.filter(c => !existingIds.has(c.id));
-
-        // 去重并排序
-        const allChats = [...defaultFiltered, ...userChats];
+        const allChats = [...DEFAULT_CONTACTS.filter(c => !existingIds.has(c.id)), ...userChats];
         const seen = new Set();
-        chatList = allChats
-            .filter(chat => {
-                const key = chat.id;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            })
-            .sort((a, b) => {
-                if (a.is_default && !b.is_default) return -1;
-                if (!a.is_default && b.is_default) return 1;
-                return new Date(b.last_time) - new Date(a.last_time);
-            });
+        chatList = allChats.filter(c => {
+            if (seen.has(c.id)) return false;
+            seen.add(c.id);
+            return true;
+        }).sort((a, b) => {
+            if (a.is_default && !b.is_default) return -1;
+            if (!a.is_default && b.is_default) return 1;
+            return new Date(b.last_time) - new Date(a.last_time);
+        });
 
+        if (myVersion !== chatListVersion) return; // 已有更新渲染
         renderChatList();
 
-        if (chatList.length > 0) {
+        if (chatList.length > 0 && !currentChat) {
             const systemChat = chatList.find(c => c.id === 'system');
-            if (systemChat) { selectChat(systemChat); } else { selectChat(chatList[0]); }
+            selectChat(systemChat || chatList[0]);
         }
     } catch (error) {
         console.error('加载聊天失败:', error);
         chatList = DEFAULT_CONTACTS;
         renderChatList();
-        if (chatList.length > 0) selectChat(chatList[0]);
+        if (chatList.length > 0 && !currentChat) selectChat(chatList[0]);
     }
 }
 
@@ -437,34 +436,39 @@ function renderChatList() {
     if (!list) return;
 
     if (chatList.length === 0) {
-        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>暂无聊天</p></div>`;
+        list.innerHTML = `<div class="sidebar-empty"><div class="empty-icon">👥</div><p>暂无聊天</p></div>`;
         return;
     }
 
-    const userIds = chatList.filter(c => c.type === 'friend' || c.type === 'public').map(c => c.id).filter(id => id && id !== 'system' && id !== 'public' && id !== '-1');
+    const userIds = chatList
+        .map(c => c.id)
+        .filter(id => id && id !== 'system' && id !== 'public' && id !== '-1');
 
     getUsersStatus(userIds).then(statusMap => {
+        if (chatListVersion === 0) return;
         list.innerHTML = chatList.map(chat => {
             const active = currentChat && currentChat.id === chat.id;
-            const name = chat.display_name || chat.username || '用户';
-            const avatar = chat.avatar_url || 'https://zirui6.github.io/touxiang.jpg';
-            const lastMsg = chat.last_message || '暂无消息';
+            const name = escapeHtml(chat.display_name || chat.username || '用户');
+            const avatar = chat.avatar_url || DEFAULT_AVATAR;
+            const lastMsg = escapeHtml(chat.last_message || '暂无消息');
             const time = chat.last_time ? formatTime(chat.last_time) : '';
             const unread = chat.id !== 'system' ? getUnreadCount(chat.id) : 0;
             let statusDot = '';
             if (chat.type === 'friend' && chat.id !== '-1') {
-                const status = statusMap[chat.id];
-                statusDot = status && status.status === 'online' ? '<span class="status-dot-online"></span>' : '<span class="status-dot-offline"></span>';
+                const st = statusMap[chat.id];
+                statusDot = st && st.status === 'online'
+                    ? '<span class="status-dot-online"></span>'
+                    : '<span class="status-dot-offline"></span>';
             }
             return `
                 <div class="chat-item ${active ? 'active' : ''}" data-id="${chat.id}" onclick="selectChatById('${chat.id}')">
                     <div class="avatar-wrapper">
-                        <img src="${avatar}" class="avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-                        <div class="avatar default" style="display:none;">${getInitials(name)}</div>
+                        <img src="${avatar}" class="avatar" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                        <div class="avatar default" style="display:none;">${getInitials(chat.display_name || chat.username)}</div>
                         ${statusDot}
                     </div>
                     <div class="info">
-                        <div class="name">${name} ${chat.is_default ? '📌' : ''}</div>
+                        <div class="name">${name}</div>
                         <div class="last-msg">${lastMsg}</div>
                     </div>
                     <div class="meta">
@@ -479,37 +483,47 @@ function renderChatList() {
 }
 
 // ============================================================
+// 就地更新聊天列表（新消息到达时，不重排整个 DOM）
+// ============================================================
+function touchChatList(chatId, content, time) {
+    const chat = chatList.find(c => String(c.id) === String(chatId));
+    if (!chat) { loadChats(); return; }
+    chat.last_message = content;
+    chat.last_time = time || new Date().toISOString();
+    // 非默认联系人按时间置顶
+    if (!chat.is_default) {
+        chatList.sort((a, b) => {
+            if (a.is_default && !b.is_default) return -1;
+            if (!a.is_default && b.is_default) return 1;
+            return new Date(b.last_time) - new Date(a.last_time);
+        });
+    }
+    renderChatList();
+}
+
+// ============================================================
 // 选择聊天
 // ============================================================
 function selectChat(chat) {
     if (!chat) return;
     currentChat = chat;
+    if (chat.type !== 'system') clearUnread(chat.id);
 
-    if (chat.type !== 'system') { clearUnread(chat.id); }
-
-    // 桌面版
     if (!window.location.pathname.includes('phone.html')) {
         renderChatList();
-        const emptyState = $('emptyState');
+        $('emptyState') && ($('emptyState').style.display = 'none');
         const chatHeader = $('chatHeader');
         const chatInput = $('chatInput');
-        if (emptyState) emptyState.style.display = 'none';
         if (chatHeader) chatHeader.style.display = 'flex';
         if (chatInput) chatInput.style.display = 'block';
         const name = chat.display_name || chat.username || '用户';
-        const chatName = $('chatName');
-        const chatStatus = $('chatStatus');
-        if (chatName) chatName.textContent = name;
-        if (chatStatus) chatStatus.textContent = '在线';
+        if ($('chatName')) $('chatName').textContent = name;
+        if ($('chatStatus')) $('chatStatus').textContent = '在线';
     } else {
-        // 手机版：切换到聊天视图
-        const mainView = document.getElementById('mainView');
-        const chatView = document.getElementById('chatView');
-        if (mainView) mainView.classList.remove('active');
-        if (chatView) chatView.classList.add('active');
+        $('mainView')?.classList.remove('active');
+        $('chatView')?.classList.add('active');
         const name = chat.display_name || chat.username || '用户';
-        const chatName = document.getElementById('chatName');
-        if (chatName) chatName.textContent = name;
+        if ($('chatName')) $('chatName').textContent = name;
     }
 
     if (chat.type === 'system' || chat.id === 'system') {
@@ -517,7 +531,6 @@ function selectChat(chat) {
     } else {
         loadChatHistory(chat.id);
     }
-    scrollToBottom();
 }
 
 function selectChatById(id) {
@@ -526,56 +539,42 @@ function selectChatById(id) {
 }
 
 // ============================================================
-// 加载聊天历史（严格的双向过滤）
+// 加载聊天历史
 // ============================================================
+function resetMessages() {
+    messages = [];
+    knownMessageIds.clear();
+}
+
 async function loadChatHistory(chatId) {
     const list = $('messageList');
     if (!list) return;
-    list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载历史消息...</div>';
+    list.innerHTML = '<div class="msg-loading">📥 加载历史消息...</div>';
+    resetMessages();
 
     try {
         const response = await fetch(
-            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=500`,
+            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=${CONFIG.HISTORY_LIMIT}`,
             { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
         );
 
         if (response.ok) {
             const data = await response.json();
-            const filtered = data.filter(msg => {
-                // 公共频道
-                if (chatId === 'public') {
-                    return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
-                }
-                // 文件传输助手
-                if (chatId === '-1') {
-                    return msg.receiver_id === '-1' || msg.sender_id === '-1';
-                }
-                // 私聊：严格双向过滤
-                const fromOtherToMe = msg.sender_id === chatId && msg.receiver_id === currentUser.id;
-                const fromMeToOther = msg.sender_id === currentUser.id && msg.receiver_id === chatId;
-                return fromOtherToMe || fromMeToOther;
-            });
-
-            if (filtered.length > 0) {
-                messages = filtered;
-                saveLocalMessages(chatId);
-                renderMessages();
-            } else {
-                messages = [];
-                renderMessages();
-                if (chatId === 'public') {
-                    messages.push({
-                        id: Date.now(),
-                        sender_id: 'system',
-                        sender_name: '系统',
-                        content: '👋 欢迎来到公共频道！在这里可以自由交流。',
-                        created_at: new Date().toISOString(),
-                        is_system: true
-                    });
-                    saveLocalMessages(chatId);
-                    renderMessages();
-                }
+            const filtered = data.filter(msg => messageBelongsToChat(msg, chatId));
+            messages = filtered;
+            filtered.forEach(m => knownMessageIds.add(m.id));
+            if (filtered.length === 0 && chatId === 'public') {
+                messages = [{
+                    id: Date.now(),
+                    sender_id: 'system',
+                    sender_name: '系统',
+                    content: '👋 欢迎来到公共频道！在这里可以自由交流。',
+                    created_at: new Date().toISOString(),
+                    is_system: true
+                }];
             }
+            saveLocalMessages(chatId);
+            renderMessages(true);
         } else {
             loadLocalMessages(chatId);
         }
@@ -585,27 +584,41 @@ async function loadChatHistory(chatId) {
     }
 }
 
+// 判断消息是否属于某会话
+function messageBelongsToChat(msg, chatId) {
+    if (chatId === 'public') {
+        return msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public';
+    }
+    if (chatId === '-1') {
+        return msg.receiver_id === '-1' || msg.sender_id === '-1';
+    }
+    const fromOtherToMe = msg.sender_id === chatId && msg.receiver_id === currentUser.id;
+    const fromMeToOther = msg.sender_id === currentUser.id && msg.receiver_id === chatId;
+    return fromOtherToMe || fromMeToOther;
+}
+
 // ============================================================
 // 加载系统聊天
 // ============================================================
 async function loadSystemChat() {
     const list = $('messageList');
     if (!list) return;
-    list.innerHTML = '<div style="text-align:center;padding:20px;color:#666688;">📥 加载公告中...</div>';
+    list.innerHTML = '<div class="msg-loading">📥 加载公告中...</div>';
+    resetMessages();
+
     const items = await loadSystemMessages();
     if (items.length === 0) {
         list.innerHTML = `
-            <div style="text-align:center;padding:40px 0;color:#666688;">
-                <div style="font-size:40px;margin-bottom:12px;">📢</div>
+            <div class="sidebar-empty">
+                <div class="empty-icon">📢</div>
                 <p>暂无公告</p>
-                <p style="font-size:12px;">系统消息将在这里显示</p>
-                <button onclick="loadSystemChat()" style="margin-top:12px;padding:6px 20px;background:#4a6cf7;color:#fff;border:none;border-radius:6px;cursor:pointer;">🔄 刷新</button>
+                <button class="btn-refresh" onclick="loadSystemChat()">🔄 刷新</button>
             </div>
         `;
         return;
     }
     messages = items;
-    renderMessages();
+    renderMessages(true);
 }
 
 // ============================================================
@@ -613,7 +626,12 @@ async function loadSystemChat() {
 // ============================================================
 function loadLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
-    try { const data = localStorage.getItem(key); messages = data ? JSON.parse(data) : []; renderMessages(); } catch (e) { messages = []; }
+    try {
+        const data = localStorage.getItem(key);
+        messages = data ? JSON.parse(data) : [];
+        messages.forEach(m => knownMessageIds.add(m.id));
+        renderMessages(true);
+    } catch (e) { messages = []; }
 }
 function saveLocalMessages(chatId) {
     const key = 'chat_messages_' + chatId;
@@ -621,74 +639,94 @@ function saveLocalMessages(chatId) {
 }
 
 // ============================================================
-// 渲染消息
+// 渲染消息（增量追加，保持滚动位置）
 // ============================================================
-function renderMessages() {
+let lastRenderedTime = 0;
+const TIME_GAP = 5 * 60 * 1000;
+
+function renderMessages(forceScroll) {
     const list = $('messageList');
     if (!list) return;
 
     if (!messages || messages.length === 0) {
-        list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><p>暂无消息</p><p style="font-size:12px;">发送第一条消息吧</p></div>`;
+        list.innerHTML = `<div class="sidebar-empty"><div class="empty-icon">💬</div><p>暂无消息</p><p class="empty-hint">发送第一条消息吧</p></div>`;
         return;
     }
 
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+
     let html = '';
+    let prevTime = 0;
     messages.forEach(msg => {
-        if (msg.is_system && msg.is_article) {
-            html += renderArticleMessage(msg);
-            return;
+        if (msg.is_system && msg.is_article) { html += renderArticleMessage(msg); return; }
+
+        const t = new Date(msg.created_at).getTime();
+        if (t - prevTime > TIME_GAP) {
+            html += `<div class="msg-time-divider">${formatMsgTime(msg.created_at)}</div>`;
         }
+        prevTime = t;
 
         const isSent = msg.sender_id === currentUser?.id;
-        const senderName = msg.sender_name || '用户';
-        const avatar = isSent 
-            ? (currentUser?.avatar_url || 'https://zirui6.github.io/touxiang.jpg')
-            : (currentChat?.avatar_url || 'https://zirui6.github.io/touxiang.jpg');
-        const time = formatTime(msg.created_at);
+        const senderName = escapeHtml(msg.sender_name || '用户');
+        const avatar = isSent
+            ? (currentUser?.avatar_url || DEFAULT_AVATAR)
+            : (currentChat?.avatar_url || DEFAULT_AVATAR);
+        const mine = isSent ? 'sent' : 'received';
 
         html += `
-            <div class="message ${isSent ? 'sent' : 'received'}">
-                <div class="msg-avatar-wrapper">
-                    <img src="${avatar}" class="msg-avatar" alt="" onerror="this.src='https://zirui6.github.io/touxiang.jpg'" />
-                    <div class="msg-sender">${senderName}</div>
-                </div>
-                <div class="msg-content-wrapper">
-                    <div class="msg-bubble">${msg.content || ''}</div>
-                    <div class="msg-time">${time}</div>
+            <div class="message ${mine}">
+                <img src="${avatar}" class="msg-avatar" alt="" onerror="this.src='${DEFAULT_AVATAR}'" />
+                <div class="msg-body">
+                    ${isSent ? '' : `<div class="msg-sender">${senderName}</div>`}
+                    <div class="msg-bubble">${escapeHtml(msg.content || '')}</div>
                 </div>
             </div>
         `;
     });
 
     list.innerHTML = html;
-    scrollToBottom();
+
+    // 只有本来在底部（或强制）才滚到底，避免打断阅读
+    if (forceScroll || nearBottom) scrollToBottom(false);
 }
 
 function renderArticleMessage(msg) {
     const time = formatTime(msg.publish_date || msg.created_at);
-    const imageHtml = msg.image_url ? `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')"><img src="${msg.image_url}" alt="${msg.content}" loading="lazy" onerror="this.style.display='none'" /></div>` : '';
+    const imageHtml = msg.image_url
+        ? `<div class="article-image" onclick="window.open('${msg.image_url}','_blank')"><img src="${msg.image_url}" alt="" loading="lazy" onerror="this.style.display='none'" /></div>`
+        : '';
     return `
-        <div class="message received article-message">
-            <div class="msg-avatar-wrapper">
-                <div class="msg-avatar system-avatar">📢</div>
+        <div class="msg-time-divider">${time}</div>
+        <div class="message received">
+            <div class="msg-avatar system-avatar">📢</div>
+            <div class="msg-body">
                 <div class="msg-sender">系统服务</div>
-            </div>
-            <div class="msg-content-wrapper">
                 <div class="msg-bubble article-bubble">
-                    <div class="article-publisher">📢 ${msg.publisher || '系统服务'}</div>
-                    <div class="article-title">${msg.content}</div>
-                    ${msg.subtitle ? `<div class="article-subtitle">${msg.subtitle}</div>` : ''}
+                    <div class="article-publisher">📢 ${escapeHtml(msg.publisher || '系统服务')}</div>
+                    <div class="article-title">${escapeHtml(msg.content)}</div>
+                    ${msg.subtitle ? `<div class="article-subtitle">${escapeHtml(msg.subtitle)}</div>` : ''}
                     ${imageHtml}
-                    <div class="article-time">${time}</div>
                 </div>
             </div>
         </div>
     `;
 }
 
+// 追加单条消息（即时刷新核心：不重载整页）
+function appendIncomingMessage(msg) {
+    if (!currentChat) return;
+    if (knownMessageIds.has(msg.id)) return;
+    knownMessageIds.add(msg.id);
+    messages.push(msg);
+    saveLocalMessages(currentChat.id);
+    renderMessages(false);
+}
+
 // ============================================================
 // 发送消息
 // ============================================================
+let tempIdCounter = -1;
+
 async function sendMessage() {
     const input = $('messageInput');
     const content = input.value.trim();
@@ -711,21 +749,18 @@ async function sendMessage() {
         created_at: new Date().toISOString()
     };
 
-    const localMsg = { ...msgData, id: Date.now() };
+    // 乐观渲染（临时负 id，服务器回包/订阅推送后替换）
+    const tempId = tempIdCounter--;
+    const localMsg = { ...msgData, id: tempId };
     messages.push(localMsg);
+    knownMessageIds.add(tempId);
     saveLocalMessages(currentChat.id);
-    renderMessages();
-    scrollToBottom();
+    renderMessages(true);
 
     input.value = '';
     input.style.height = 'auto';
 
-    const chat = chatList.find(c => c.id === currentChat.id);
-    if (chat) {
-        chat.last_message = content;
-        chat.last_time = new Date().toISOString();
-        renderChatList();
-    }
+    touchChatList(currentChat.id, content, msgData.created_at);
 
     try {
         const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages', {
@@ -738,61 +773,232 @@ async function sendMessage() {
             },
             body: JSON.stringify(msgData)
         });
-        if (response.ok) { console.log('✅ 消息已保存'); showToast('✅ 消息已发送', 'success'); }
-        else { showToast('⚠️ 本地已保存，云端同步失败', 'error'); }
-    } catch (error) { showToast('⚠️ 本地已保存，云端同步失败', 'error'); }
+        if (response.ok) {
+            // 用真实 id 替换临时 id
+            const saved = await response.json();
+            if (Array.isArray(saved) && saved.length > 0) {
+                const idx = messages.findIndex(m => m.id === tempId);
+                if (idx >= 0) {
+                    knownMessageIds.delete(tempId);
+                    messages[idx] = saved[0];
+                    knownMessageIds.add(saved[0].id);
+                    saveLocalMessages(currentChat.id);
+                }
+            }
+        } else {
+            showToast('⚠️ 本地已保存，云端同步失败', 'error');
+        }
+    } catch (error) {
+        showToast('⚠️ 本地已保存，云端同步失败', 'error');
+    }
 }
 
 // ============================================================
-// 轮询
+// ★ 即时刷新核心 1：Supabase Realtime（WebSocket 订阅）
 // ============================================================
+function startRealtime() {
+    if (!window.supabase || !window.supabase.createClient) { console.warn('Realtime SDK 未加载'); return; }
+    if (realtimeChannel) { try { window.supabase.removeChannel(realtimeChannel); } catch (e) {} }
+
+    try {
+        const client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+        realtimeChannel = client
+            .channel('messages-instant-' + Date.now())
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages' },
+                payload => {
+                    realtimeOk = true;
+                    handleIncomingMessage(payload.new);
+                }
+            )
+            .subscribe(status => {
+                if (status === 'SUBSCRIBED') {
+                    realtimeOk = true;
+                    console.log('⚡ Realtime 已连接，即时刷新生效');
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    realtimeOk = false;
+                    console.warn('Realtime 连接异常，轮询兜底接管');
+                }
+            });
+    } catch (e) {
+        console.error('Realtime 初始化失败:', e);
+    }
+}
+
+// ============================================================
+// ★ 即时刷新核心 2：增量轮询（Realtime 兜底 + 断线补偿）
+// ============================================================
+let pollingBusy = false;
+
 function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
     pollingInterval = setInterval(async () => {
         if (!isLoggedIn) return;
-        if (currentChat && (currentChat.type === 'system' || currentChat.id === 'system')) return;
+        if (document.hidden) return;                    // 后台不轮询，回前台时全量拉一次
+        if (pollingBusy) return;
+        pollingBusy = true;
         try {
-            const response = await fetch(CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.desc&limit=50', {
+            // 已在系统公告页：只低频刷新公告
+            if (currentChat && (currentChat.type === 'system' || currentChat.id === 'system')) {
+                if (!realtimeOk) loadSystemChat();
+                return;
+            }
+
+            // 增量查询：只取比当前会话最新消息更新的
+            let url = CONFIG.SUPABASE_URL + '/rest/v1/messages?order=created_at.asc&limit=100';
+            const maxId = getMaxKnownMessageId();
+            if (maxId > 0) url += `&id=gt.${maxId}`;
+
+            const response = await fetch(url, {
                 headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY }
             });
-            if (response.ok) {
-                const data = await response.json();
-                const filtered = data.filter(msg => {
-                    if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
-                    if (msg.receiver_id === currentUser.id) return true;
-                    if (msg.sender_id === currentUser.id) return true;
-                    if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
-                    return false;
-                });
-                if (filtered.length > 0) {
-                    const latest = filtered[0];
-                    const lastKey = currentChat ? currentChat.id : 'none';
-                    const lastId = lastMessageId[lastKey] || 0;
-                    if (latest.id !== lastId) {
-                        const newMsgs = filtered.filter(m => m.id > lastId);
-                        if (currentChat) {
-                            const isCurrent = newMsgs.some(m => m.sender_id === currentChat.id || m.receiver_id === currentChat.id);
-                            if (isCurrent) { loadChatHistory(currentChat.id); }
-                            else {
-                                newMsgs.forEach(m => { if (m.sender_id !== currentUser.id) { incrementUnread(m.sender_id); } });
-                            }
-                        } else {
-                            newMsgs.forEach(m => { if (m.sender_id !== currentUser.id) { incrementUnread(m.sender_id); } });
-                        }
-                        lastMessageId[lastKey] = latest.id;
-                    }
-                }
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (!Array.isArray(data) || data.length === 0) return;
+
+            // 与服务端全量对账：避免 Realtime 丢消息导致两端不一致
+            let hasNewForMe = false;
+            data.forEach(msg => {
+                const related = isMessageRelatedToMe(msg);
+                if (related) { hasNewForMe = true; handleIncomingMessage(msg, true); }
+            });
+            // 长时间无增量时定期校验会话完整性（每 ~5 分钟）
+            if (hasNewForMe || Date.now() - (window._lastFullSync || 0) > 5 * 60 * 1000) {
+                window._lastFullSync = Date.now();
+                reconcileCurrentChat();
+                loadChats();
             }
-        } catch (error) { console.error('轮询错误:', error); }
-    }, 5000);
+        } catch (error) {
+            console.error('轮询错误:', error);
+        } finally {
+            pollingBusy = false;
+        }
+    }, CONFIG.POLL_INTERVAL);
+}
+
+function getMaxKnownMessageId() {
+    let max = 0;
+    knownMessageIds.forEach(id => { if (typeof id === 'number' && id > max) max = id; });
+    return max;
+}
+
+function isMessageRelatedToMe(msg) {
+    if (!currentUser) return false;
+    if (msg.sender_id === currentUser.id) return true;
+    if (msg.receiver_id === currentUser.id) return true;
+    if (msg.receiver_id === null || msg.receiver_id === 'null' || msg.receiver_id === 'public') return true;
+    if (msg.receiver_id === '-1' || msg.sender_id === '-1') return true;
+    return false;
+}
+
+// 当前会话与服务端对账（补漏 Realtime 可能丢失的消息）
+let reconciling = false;
+async function reconcileCurrentChat() {
+    if (!currentChat || reconciling) return;
+    if (currentChat.type === 'system' || currentChat.id === 'system') return;
+    reconciling = true;
+    try {
+        const response = await fetch(
+            CONFIG.SUPABASE_URL + `/rest/v1/messages?order=created_at.asc&limit=${CONFIG.HISTORY_LIMIT}`,
+            { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY } }
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        const filtered = data.filter(m => messageBelongsToChat(m, currentChat.id));
+        const filteredIds = new Set(filtered.map(m => m.id));
+
+        let changed = false;
+        // 服务端有而本地没有 → 补上
+        filtered.forEach(m => {
+            if (!knownMessageIds.has(m.id)) {
+                knownMessageIds.add(m.id);
+                messages.push(m);
+                changed = true;
+            }
+        });
+        // 本地临时消息已被服务端确认 → 替换
+        messages = messages.map(m => {
+            if (typeof m.id === 'number' && m.id < 0 && m.sender_id === currentUser.id) {
+                const match = filtered.find(s =>
+                    s.sender_id === m.sender_id && s.receiver_id === m.receiver_id &&
+                    s.content === m.content && new Date(s.created_at) >= new Date(m.created_at) - 1000
+                );
+                if (match) { knownMessageIds.delete(m.id); knownMessageIds.add(match.id); changed = true; return match; }
+            }
+            return m;
+        });
+        // 本地有而服务端没有（被删除）→ 移除
+        messages = messages.filter(m => {
+            if (m.is_system) return true;
+            if (typeof m.id === 'number' && m.id < 0) return true; // 尚未确认的本地消息保留
+            if (!filteredIds.has(m.id)) { changed = true; return false; }
+            return true;
+        });
+        messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+        if (changed) {
+            saveLocalMessages(currentChat.id);
+            renderMessages(false);
+        }
+    } catch (e) {
+        console.error('对账失败:', e);
+    } finally {
+        reconciling = false;
+    }
+}
+
+// 统一入口：处理新消息（Realtime 推送 或 轮询增量）
+function handleIncomingMessage(msg, fromPolling) {
+    if (!msg || !currentUser) return;
+
+    const isMine = msg.sender_id === currentUser.id;
+
+    // 与我无关的消息直接忽略
+    if (!isMessageRelatedToMe(msg)) return;
+
+    // 属于我的其他设备发出的消息 → 也可能在当前会话
+    if (currentChat && messageBelongsToChat(msg, currentChat.id)) {
+        if (msg.is_system && msg.is_article) return;
+        // 自己发的：若已有临时消息，替换而非重复追加
+        if (isMine && typeof msg.id === 'number') {
+            const tempIdx = messages.findIndex(m => m.id < 0 && m.content === msg.content && m.sender_id === msg.sender_id);
+            if (tempIdx >= 0) {
+                knownMessageIds.delete(messages[tempIdx].id);
+                messages[tempIdx] = msg;
+                knownMessageIds.add(msg.id);
+                saveLocalMessages(currentChat.id);
+                renderMessages(false);
+                touchChatList(currentChat.id, msg.content, msg.created_at);
+                return;
+            }
+        }
+        appendIncomingMessage(msg);
+        touchChatList(currentChat.id, msg.content, msg.created_at);
+        return;
+    }
+
+    // 非当前会话：更新未读 + 列表预览
+    if (!isMine) {
+        const chatId = msg.sender_id;
+        if (chatId && chatId !== 'system') {
+            incrementUnread(chatId);
+            touchChatList(chatId, msg.content, msg.created_at);
+            // 列表里没有这个联系人 → 重新拉取
+            if (!chatList.some(c => String(c.id) === String(chatId))) loadChats();
+        }
+    }
 }
 
 // ============================================================
 // 滚动
 // ============================================================
-function scrollToBottom() {
+function scrollToBottom(smooth) {
     const list = $('messageList');
-    setTimeout(() => { if (list) list.scrollTop = list.scrollHeight; }, 50);
+    setTimeout(() => {
+        if (!list) return;
+        list.scrollTo({ top: list.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    }, 30);
 }
 
 // ============================================================
@@ -814,40 +1020,25 @@ function getUserFromURL() {
 // 切换标签页
 // ============================================================
 function switchTab(tab) {
-    console.log('切换标签:', tab);
-    
-    // 桌面版
     if (!window.location.pathname.includes('phone.html')) {
-        document.querySelectorAll('.func-item[data-tab]').forEach(btn => {
-            btn.classList.remove('active');
+        document.querySelectorAll('.func-item[data-tab]').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`.func-item[data-tab="${tab}"]`)?.classList.add('active');
+
+        const map = { chat: 'sidebarChat', friends: 'sidebarFriends', settings: 'sidebarSettings' };
+        Object.entries(map).forEach(([key, id]) => {
+            const el = $(id);
+            if (el) el.style.display = tab === key ? 'flex' : 'none';
         });
-        const activeBtn = document.querySelector(`.func-item[data-tab="${tab}"]`);
-        if (activeBtn) activeBtn.classList.add('active');
-        
-        const sidebarChat = document.getElementById('sidebarChat');
-        const sidebarFriends = document.getElementById('sidebarFriends');
-        const sidebarSettings = document.getElementById('sidebarSettings');
-        
-        if (sidebarChat) sidebarChat.style.display = tab === 'chat' ? 'flex' : 'none';
-        if (sidebarFriends) sidebarFriends.style.display = tab === 'friends' ? 'flex' : 'none';
-        if (sidebarSettings) sidebarSettings.style.display = tab === 'settings' ? 'flex' : 'none';
-        
-        if (tab === 'friends') { loadFriendList(); }
+        if (tab === 'friends') loadFriendList();
         return;
     }
-    
-    // 手机版
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    const target = document.querySelector(`.nav-item[data-tab="${tab}"]`);
-    if (target) target.classList.add('active');
-    
+
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
+
     if (tab === 'chat') {
-        const mainView = document.getElementById('mainView');
-        const chatView = document.getElementById('chatView');
-        if (mainView) mainView.classList.add('active');
-        if (chatView) chatView.classList.remove('active');
+        $('mainView')?.classList.add('active');
+        $('chatView')?.classList.remove('active');
     } else if (tab === 'friends') {
         showToast('👥 通讯录功能开发中', 'info');
     } else if (tab === 'profile') {
@@ -861,21 +1052,13 @@ function switchTab(tab) {
 // 手机版视图切换
 // ============================================================
 function closeChat() {
-    console.log('📱 关闭聊天');
-    const mainView = document.getElementById('mainView');
-    const chatView = document.getElementById('chatView');
-    if (mainView) mainView.classList.add('active');
-    if (chatView) chatView.classList.remove('active');
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.add('hidden');
+    $('mainView')?.classList.add('active');
+    $('chatView')?.classList.remove('active');
 }
 
 function switchToChatView(chatId) {
-    console.log('📱 切换到聊天:', chatId);
-    const mainView = document.getElementById('mainView');
-    const chatView = document.getElementById('chatView');
-    if (mainView) mainView.classList.remove('active');
-    if (chatView) chatView.classList.add('active');
+    $('mainView')?.classList.remove('active');
+    $('chatView')?.classList.add('active');
     if (chatId) {
         const chat = chatList.find(c => String(c.id) === String(chatId));
         if (chat) selectChat(chat);
@@ -893,15 +1076,14 @@ function closeAddFriend() {
     $('searchResults').innerHTML = '';
 }
 function searchAndAddFriend() {
-    const input = $('addFriendInput');
-    const keyword = input.value.trim();
+    const keyword = $('addFriendInput').value.trim();
     if (!keyword) { showToast('请输入用户ID或用户名', 'warning'); return; }
     showToast('🔍 搜索功能开发中', 'info');
 }
 function loadFriendList() {
     const list = $('friendList');
     if (!list) return;
-    list.innerHTML = `<div style="text-align:center;padding:40px 0;color:#666688;"><div style="font-size:40px;margin-bottom:12px;">👥</div><p>好友功能开发中</p><p style="font-size:12px;">点击 ➕ 添加好友</p></div>`;
+    list.innerHTML = `<div class="sidebar-empty"><div class="empty-icon">👥</div><p>好友功能开发中</p><p class="empty-hint">点击 ➕ 添加好友</p></div>`;
 }
 
 // ============================================================
@@ -909,12 +1091,11 @@ function loadFriendList() {
 // ============================================================
 function clearAllData() {
     if (confirm('确定要清除所有本地缓存数据吗？')) {
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-            if (key.startsWith('chat_messages_') || key.startsWith('chat_unread_')) { localStorage.removeItem(key); }
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('chat_messages_') || key.startsWith('chat_unread_')) localStorage.removeItem(key);
         });
         showToast('✅ 缓存已清除', 'success');
-        if (currentChat) { loadChatHistory(currentChat.id); }
+        if (currentChat) loadChatHistory(currentChat.id);
         updateTotalBadge();
     }
 }
@@ -931,8 +1112,10 @@ function logout() {
         sessionStorage.clear();
         isLoggedIn = false;
         currentUser = null;
+        currentChat = null;
         if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
-        $('loginOverlay').classList.add('show');
+        if (realtimeChannel) { try { window.supabase.removeChannel(realtimeChannel); } catch (e) {} realtimeChannel = null; }
+        $('loginOverlay')?.classList.add('show');
         updateUIForGuest();
         showToast('已退出登录', 'info');
     }
@@ -942,17 +1125,16 @@ function logout() {
 // 二维码
 // ============================================================
 function openQR() {
-    const modal = $('qrModal');
+    $('qrModal')?.classList.add('show');
     const userIdEl = $('qrUserId');
-    if (modal) modal.classList.add('show');
-    if (userIdEl && currentUser) { userIdEl.textContent = currentUser.id || '-'; }
+    if (userIdEl && currentUser) userIdEl.textContent = currentUser.id || '-';
 }
-function closeQR() { $('qrModal').classList.remove('show'); }
+function closeQR() { $('qrModal')?.classList.remove('show'); }
 function copyUserId() {
     if (currentUser && currentUser.id) {
         const id = String(currentUser.id);
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(id).then(() => { showToast('✅ 用户ID已复制', 'success'); });
+            navigator.clipboard.writeText(id).then(() => showToast('✅ 用户ID已复制', 'success'));
         } else {
             const input = document.createElement('input');
             input.value = id;
@@ -970,12 +1152,11 @@ function copyUserId() {
 // ============================================================
 function toggleTheme() {
     const html = document.documentElement;
-    const current = html.getAttribute('data-theme') || 'light';
-    const next = current === 'dark' ? 'light' : 'dark';
+    const next = (html.getAttribute('data-theme') || 'light') === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     const statusEl = $('themeStatus');
-    if (statusEl) { statusEl.textContent = next === 'dark' ? '深色模式' : '浅色模式'; }
+    if (statusEl) statusEl.textContent = next === 'dark' ? '深色模式' : '浅色模式';
     showToast(next === 'dark' ? '🌙 深色模式' : '☀️ 浅色模式', 'info');
 }
 
@@ -983,7 +1164,7 @@ function loadTheme() {
     const saved = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     const statusEl = $('themeStatus');
-    if (statusEl) { statusEl.textContent = saved === 'dark' ? '深色模式' : '浅色模式'; }
+    if (statusEl) statusEl.textContent = saved === 'dark' ? '深色模式' : '浅色模式';
 }
 
 // ============================================================
@@ -995,7 +1176,8 @@ document.addEventListener('visibilitychange', function() {
     } else {
         updateUserStatus('online');
         if (isLoggedIn && currentChat) {
-            loadChatHistory(currentChat.id);
+            if (currentChat.type === 'system') loadSystemChat();
+            else { reconcileCurrentChat(); loadChats(); }
         }
     }
 });
@@ -1009,25 +1191,18 @@ window.addEventListener('beforeunload', function() {
 // 初始化
 // ============================================================
 function init() {
-    console.log('🚀 梓睿聊天启动');
+    console.log('🚀 梓睿聊天 v3 启动（微信风格 + 即时刷新）');
 
     const urlUser = getUserFromURL();
-    if (urlUser) {
-        console.log('✅ 从 URL 获取用户:', urlUser.username);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
+    if (urlUser) window.history.replaceState({}, document.title, window.location.pathname);
 
     const loggedIn = checkLoginStatus();
-    if (loggedIn) {
-        console.log('✅ 已登录:', currentUser?.username);
-    } else {
-        console.log('👤 未登录');
+    if (!loggedIn) {
         const user = getLocalUser();
         if (user && user.id) {
             currentUser = user;
             isLoggedIn = true;
-            const overlay = $('loginOverlay');
-            if (overlay) overlay.classList.remove('show');
+            $('loginOverlay')?.classList.remove('show');
             updateUIForLoggedIn();
         }
     }
@@ -1054,11 +1229,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     $('fileInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) { showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info'); }
+        if (this.files.length > 0) showToast(`📎 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
         this.value = '';
     });
     $('imageInput')?.addEventListener('change', function() {
-        if (this.files.length > 0) { showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info'); }
+        if (this.files.length > 0) showToast(`🖼️ 已选择: ${this.files[0].name}，上传功能开发中`, 'info');
         this.value = '';
     });
     $('addFriendSubmit')?.addEventListener('click', searchAndAddFriend);
@@ -1068,18 +1243,12 @@ document.addEventListener('DOMContentLoaded', function() {
     $('avatarBtn')?.addEventListener('click', openQR);
     $('copyIdBtn')?.addEventListener('click', copyUserId);
 
-    // 手机版：聊天列表点击切换视图
     if (window.location.pathname.includes('phone.html')) {
-        const chatListEl = document.getElementById('chatList');
+        const chatListEl = $('chatList');
         if (chatListEl) {
             chatListEl.addEventListener('click', function(e) {
                 const item = e.target.closest('.chat-item');
-                if (item) {
-                    const id = item.dataset.id;
-                    if (id) {
-                        switchToChatView(id);
-                    }
-                }
+                if (item && item.dataset.id) switchToChatView(item.dataset.id);
             });
         }
     }
@@ -1114,6 +1283,3 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-
-console.log('📋 Supabase URL:', CONFIG.SUPABASE_URL);
-console.log('📋 Airtable Base ID:', AIRTABLE_CONFIG.BASE_ID);
