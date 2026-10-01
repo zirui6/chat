@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN" id="htmlRoot">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>登录 · 聊天</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg-body:#eef2f7; --bg-card:#fff; --text-primary:#0b1a2e; --text-secondary:#2c3e5a;
+  --text-muted:#6b7f96; --border-color:#dce3ed; --accent:#1a4b8c;
+  --accent-light:rgba(26,75,140,0.08); --radius-md:14px; --radius-lg:20px;
+  --transition:.3s ease;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+}
+[data-theme="dark"] {
+  --bg-body:#0a1628; --bg-card:#111d33; --text-primary:#e8edf4; --text-secondary:#a8b9d0;
+  --text-muted:#6b7f96; --border-color:#1e3350; --accent:#4a8fd8;
+  --accent-light:rgba(74,143,216,0.12);
+}
+body {
+  font-family:var(--font); background:var(--bg-body); min-height:100vh;
+  display:flex; justify-content:center; align-items:center; padding:24px;
+  transition:background var(--transition);
+}
+.login-container {
+  background:var(--bg-card); border-radius:var(--radius-lg); padding:44px 40px 36px;
+  max-width:440px; width:100%; box-shadow:0 20px 64px rgba(11,26,46,0.12);
+  border:1px solid var(--border-color);
+}
+.login-header { text-align:center; margin-bottom:28px; }
+.login-header .logo-img { max-width:160px; height:auto; display:block; margin:0 auto 12px; border-radius:16px; }
+.login-header p { color:var(--text-muted); font-size:15px; margin-top:6px; }
+
+.tabs { display:flex; gap:4px; background:var(--bg-body); border-radius:var(--radius-md); padding:4px; margin-bottom:24px; }
+.tabs .tab { flex:1; padding:10px 0; border:none; background:transparent; border-radius:10px; font-size:14px; font-weight:600; color:var(--text-secondary); cursor:pointer; transition:all var(--transition); }
+.tabs .tab.active { background:var(--bg-card); color:var(--text-primary); box-shadow:0 2px 8px rgba(0,0,0,0.04); }
+
+.form-panel { display:none; }
+.form-panel.active { display:block; animation:fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+.form-group { margin-bottom:16px; }
+.form-group label { display:block; font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+.form-group input[type="text"], .form-group input[type="email"], .form-group input[type="password"] {
+  width:100%; padding:12px 16px; border:2px solid var(--border-color); border-radius:var(--radius-md);
+  font-size:15px; background:var(--bg-body); color:var(--text-primary); transition:all var(--transition); outline:none;
+}
+.form-group input:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-light); background:var(--bg-card); }
+.form-group input::placeholder { color:var(--text-muted); }
+
+.password-wrapper { position:relative; display:flex; align-items:center; }
+.password-wrapper input { width:100%; padding:12px 48px 12px 16px !important; }
+.toggle-password { position:absolute; right:14px; background:none; border:none; cursor:pointer; font-size:18px; padding:4px; color:var(--text-muted); line-height:1; }
+.toggle-password:hover { color:var(--text-primary); }
+
+.btn-primary {
+  width:100%; padding:13px; background:linear-gradient(135deg,#1a4b8c,#2c6ba8); color:#fff;
+  border:none; border-radius:var(--radius-md); font-size:16px; font-weight:600; cursor:pointer;
+  transition:all var(--transition);
+}
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(26,75,140,0.30); }
+.btn-primary:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+
+.btn-secondary {
+  width:100%; padding:11px; background:var(--bg-card); color:var(--text-primary);
+  border:2px solid var(--border-color); border-radius:var(--radius-md); font-size:14px; font-weight:600;
+  cursor:pointer; transition:all var(--transition);
+}
+.btn-secondary:hover { border-color:var(--accent); background:var(--accent-light); }
+
+.social-divider { display:flex; align-items:center; gap:16px; margin:20px 0 14px; color:var(--text-muted); font-size:13px; }
+.social-divider::before, .social-divider::after { content:''; flex:1; height:1px; background:var(--border-color); }
+
+.msg { padding:12px 16px; border-radius:var(--radius-md); font-size:14px; margin-bottom:16px; display:none; line-height:1.6; word-break:break-all; }
+.msg.error { display:block; background:#fde8e8; color:#c62828; border:1px solid #f5c6c6; }
+.msg.success { display:block; background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; }
+.msg.info { display:block; background:#e3f2fd; color:#0d47a1; border:1px solid #bbdefb; }
+.msg.warning { display:block; background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+[data-theme="dark"] .msg.error { background:#2d1a1a; color:#ef9a9a; border-color:#4a2a2a; }
+[data-theme="dark"] .msg.success { background:#1a2d1a; color:#81c784; border-color:#2a4a2a; }
+[data-theme="dark"] .msg.info { background:#1a2a3d; color:#90caf9; border-color:#2a4a6a; }
+
+.connection-status { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:16px; padding:8px 12px; background:var(--bg-body); border-radius:var(--radius-md); }
+.connection-status .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.connection-status .dot.checking { background:#ffa726; animation:pulse 1s infinite; }
+.connection-status .dot.online { background:#4caf50; }
+.connection-status .dot.offline { background:#f44336; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.footer-links { display:flex; justify-content:center; gap:20px; margin-top:20px; padding-top:16px; border-top:1px solid var(--border-color); font-size:13px; }
+.footer-links a { color:var(--text-muted); text-decoration:none; transition:color var(--transition); }
+.footer-links a:hover { color:var(--accent); }
+
+/* 扫码弹层 */
+.scan-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center; flex-direction:column; padding:20px; }
+.scan-modal.show { display:flex; }
+.scan-modal video { width:100%; max-width:400px; border-radius:12px; background:#000; }
+.scan-modal .scan-tip { color:#fff; font-size:14px; margin:16px 0; text-align:center; }
+.scan-modal .scan-close { padding:10px 32px; background:#fff; color:#222; border:none; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; }
+.scan-modal canvas { display:none; }
+
+@media (max-width:480px) {
+  .login-container { padding:28px 20px 24px; }
+  .login-header .logo-img { max-width:140px; }
+}
+</style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-header">
+    <img src="https://zirui6.github.io/logo1.png" alt="Logo" class="logo-img" />
+    <p>登录 · 梓睿聊天</p>
+  </div>
+
+  <div class="connection-status" id="connectionStatus">
+    <span class="dot checking" id="statusDot"></span>
+    <span id="statusText">正在检测服务器连接...</span>
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <!-- 已登录提示条：本机已有登录信息时显示 -->
+  <div id="existingSession" style="display:none;margin-bottom:16px;padding:14px 16px;background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--radius-md);">
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">
+      检测到本机已登录：<strong id="existingName"></strong>
+    </div>
+    <button class="btn-primary" id="continueBtn" style="font-size:14px;padding:10px;">直接进入聊天 →</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="login">登录</button>
+    <button class="tab" data-tab="register">注册</button>
+  </div>
+
+  <!-- 登录面板 -->
+  <div class="form-panel active" id="panelLogin">
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="loginAccount">用户名 / 邮箱</label>
+        <input type="text" id="loginAccount" placeholder="请输入用户名或邮箱" required autofocus />
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">密码</label>
+        <div class="password-wrapper">
+          <input type="password" id="loginPassword" placeholder="请输入密码" required minlength="6" />
+          <button type="button" class="toggle-password" id="toggleLoginPassword">👁️</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="rememberMe" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent);" />
+          <label for="rememberMe" style="margin-bottom:0;font-weight:400;cursor:pointer;font-size:14px;">记住我（7天）</label>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="loginBtn">登 录</button>
+    </form>
+
+    <div class="social-divider">或</div>
+    <button class="btn-secondary" id="syncBtn" style="margin-bottom:10px;">🔄 同步主页登录</button>
+    <button class="btn-secondary" id="scanBtn">📷 扫码登录</button>
+  </div>
+
+  <!-- 注册面板 -->
+  <div class="form-panel" id="panelRegister">
+    <form id="registerForm">
+      <div class="form-group">
+        <label for="regAccount">用户名</label>
+        <input type="text" id="regAccount" placeholder="请设置用户名（字母或数字）" required />
+      </div>
+      <div class="form-group">
+        <label for="regEmail">邮箱</label>
+        <input type="email" id="regEmail" placeholder="请输入邮箱" required />
+      </div>
+      <div class="form-group">
+        <label for="regPassword">密码</label>
+        <div class="password-wrapper">
+          <input type="password" id="regPassword" placeholder="请设置密码（至少6位）" required minlength="6" />
+          <button type="button" class="toggle-password" id="toggleRegPassword">👁️</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="regConfirm">确认密码</label>
+        <div class="password-wrapper">
+          <input type="password" id="regConfirm" placeholder="请再次输入密码" required minlength="6" />
+          <button type="button" class="toggle-password" id="toggleRegConfirm">👁️</button>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="regBtn">注 册</button>
+    </form>
+  </div>
+
+  <div class="footer-links">
+    <a href="https://zirui6.github.io/index.html">返回首页</a>
+    <a href="https://zirui6.github.io/user.html">用户中心</a>
+  </div>
+</div>
+
+<!-- 扫码弹层 -->
+<div class="scan-modal" id="scanModal">
+  <video id="scanVideo" playsinline></video>
+  <canvas id="scanCanvas"></canvas>
+  <div class="scan-tip" id="scanTip">将二维码对准摄像头</div>
+  <button class="scan-close" id="scanClose">取消</button>
+</div>
+
+<script>
+// ============================================================
+// 配置
+// ============================================================
+var API_BASE = 'https://webcloud.ziruicloud.de5.net';
+var CHAT_URL = 'index.html?user=';
+
+// ============================================================
+// DOM
+// ============================================================
+var $ = function(id) { return document.getElementById(id); };
+var msgEl = $('msg');
+var statusDot = $('statusDot');
+var statusText = $('statusText');
+
+// ============================================================
+// Cookie 工具（与主页保持一致）
+// ============================================================
+var CookieHelper = {
+  set: function(name, value, days) {
+    var expires = '';
+    if (days) {
+      var date = new Date();
+      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+      expires = '; expires=' + date.toUTCString();
+    }
+    document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+  },
+  get: function(name) {
+    var nameEQ = name + '=';
+    var ca = document.cookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+      var c = ca[i];
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+      if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length));
+    }
+    return null;
+  },
+  del: function(name) {
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  }
+};
+
+// ============================================================
+// 提示
+// ============================================================
+function showError(title, detail) {
+  msgEl.innerHTML = '<strong>❌ ' + title + '</strong><br>' + (detail || '');
+  msgEl.className = 'msg error';
+}
+function showSuccess(text) { msgEl.textContent = text; msgEl.className = 'msg success'; }
+function showInfo(text) { msgEl.textContent = text; msgEl.className = 'msg info'; }
+function showWarning(text) { msgEl.textContent = '⚠️ ' + text; msgEl.className = 'msg warning'; }
+function hideMsg() { msgEl.className = 'msg'; msgEl.innerHTML = ''; }
+
+// ============================================================
+// 写入登录态
+// ============================================================
+function saveSession(token, user, remember) {
+  var displayName = user.username || (user.email ? user.email.split('@')[0] : '用户');
+  var userId = user.id || '';
+
+  sessionStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('auth_token', token);
+  sessionStorage.setItem('user_data', JSON.stringify(user));
+  sessionStorage.setItem('userId', userId);
+  sessionStorage.setItem('userEmail', user.email || '');
+  sessionStorage.setItem('displayName', displayName);
+  sessionStorage.setItem('role', user.role || 'user');
+
+  var days = remember ? 7 : null;
+  CookieHelper.set('auth_token', token, days);
+  CookieHelper.set('user_data', JSON.stringify(user), days);
+  CookieHelper.set('isLoggedIn', 'true', days);
+  CookieHelper.set('userId', userId, days);
+  CookieHelper.set('userEmail', user.email || '', days);
+  CookieHelper.set('displayName', displayName, days);
+  CookieHelper.set('role', user.role || 'user', days);
+}
+
+// ============================================================
+// 连接检测
+// ============================================================
+async function checkConnection() {
+  statusDot.className = 'dot checking';
+  statusText.textContent = '正在检测服务器连接...';
+  try {
+    var r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      statusDot.className = 'dot online';
+      statusText.textContent = '✅ 服务器连接正常';
+    } else {
+      statusDot.className = 'dot offline';
+      statusText.textContent = '⚠️ 服务器响应异常 (' + r.status + ')';
+    }
+  } catch (e) {
+    statusDot.className = 'dot offline';
+    statusText.textContent = '❌ 无法连接服务器';
+  }
+}
+
+// ============================================================
+// Tab 切换
+// ============================================================
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    this.classList.add('active');
+    var target = this.dataset.tab;
+    document.querySelectorAll('.form-panel').forEach(function(p) { p.classList.remove('active'); });
+    $('panel' + target.charAt(0).toUpperCase() + target.slice(1)).classList.add('active');
+    hideMsg();
+  });
+});
+
+// ============================================================
+// 密码显隐
+// ============================================================
+function bindToggle(inputId, btnId) {
+  var input = $(inputId), btn = $(btnId);
+  if (!input || !btn) return;
+  btn.addEventListener('click', function() {
+    var isPwd = input.getAttribute('type') === 'password';
+    input.setAttribute('type', isPwd ? 'text' : 'password');
+    btn.textContent = isPwd ? '🙈' : '👁️';
+  });
+}
+bindToggle('loginPassword', 'toggleLoginPassword');
+bindToggle('regPassword', 'toggleRegPassword');
+bindToggle('regConfirm', 'toggleRegConfirm');
+
+// ============================================================
+// 登录
+// ============================================================
+$('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  hideMsg();
+  var account = $('loginAccount').value.trim();
+  var password = $('loginPassword').value.trim();
+  var remember = $('rememberMe').checked;
+
+  if (!account || !password) { showError('信息不完整', '请填写用户名和密码'); return; }
+
+  var btn = $('loginBtn');
+  btn.disabled = true; btn.textContent = '登录中...';
+
+  try {
+    var r = await fetch(API_BASE + '/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: account, password: password })
+    });
+    var data = await r.json();
+
+    if (r.status === 200 && data.success) {
+      saveSession(data.token, data.user, remember);
+      showSuccess('✅ 登录成功，正在进入聊天...');
+      setTimeout(function() { location.href = CHAT_URL; }, 900);
+    } else {
+      showError('登录失败', data.error || '用户名或密码错误');
+    }
+  } catch (err) {
+    showError('网络错误', err.message);
+  }
+  btn.disabled = false; btn.textContent = '登 录';
+});
+
+// ============================================================
+// 注册
+// ============================================================
+$('registerForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  hideMsg();
+  var username = $('regAccount').value.trim();
+  var email = $('regEmail').value.trim();
+  var password = $('regPassword').value.trim();
+  var confirm = $('regConfirm').value.trim();
+
+  if (!username || !email || !password || !confirm) { showError('信息不完整', '请填写所有字段'); return; }
+  if (username.length < 2) { showError('用户名无效', '用户名至少 2 个字符'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('邮箱格式错误', '请输入有效的邮箱'); return; }
+  if (password.length < 6) { showError('密码太短', '密码不能少于 6 位'); return; }
+  if (password !== confirm) { showError('密码不匹配', '两次输入的密码不一致'); return; }
+
+  var btn = $('regBtn');
+  btn.disabled = true; btn.textContent = '注册中...';
+
+  try {
+    var r = await fetch(API_BASE + '/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, email: email, password: password })
+    });
+    var data = await r.json();
+
+    if (r.status === 201 && data.success) {
+      saveSession(data.token, data.user, true);
+      showSuccess('✅ 注册成功，正在进入聊天...');
+      setTimeout(function() { location.href = CHAT_URL; }, 900);
+    } else {
+      showError('注册失败', data.error || '未知错误');
+    }
+  } catch (err) {
+    showError('网络错误', err.message);
+  }
+  btn.disabled = false; btn.textContent = '注 册';
+});
+
+// ============================================================
+// 同步主页登录
+// ============================================================
+function syncMainLogin() {
+  var userId = CookieHelper.get('userId');
+  var token = CookieHelper.get('auth_token');
+
+  if (!userId) {
+    showWarning('本机没有检测到主页登录信息，请先登录主页，或用账号密码登录');
+    return;
+  }
+
+  showInfo('检测到本机登录信息，正在校验...');
+
+  if (!token) {
+    // 有 userId 没 token，直接信任（内部小圈子简化处理）
+    showSuccess('✅ 已同步本机登录，正在进入聊天...');
+    setTimeout(function() { location.href = CHAT_URL; }, 700);
+    return;
+  }
+
+  fetch(API_BASE + '/api/verify', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.valid) {
+        showSuccess('✅ 已同步本机登录，正在进入聊天...');
+        setTimeout(function() { location.href = CHAT_URL; }, 700);
+      } else {
+        showError('同步失败', '本机登录已过期，请重新登录');
+      }
+    })
+    .catch(function() {
+      showError('校验失败', '无法连接服务器');
+    });
+}
+$('syncBtn').addEventListener('click', syncMainLogin);
+
+// ============================================================
+// 扫码登录
+// ============================================================
+var scanStream = null;
+var scanRafId = null;
+
+function openScan() {
+  var modal = $('scanModal');
+  modal.classList.add('show');
+  $('scanTip').textContent = '将二维码对准摄像头';
+  startCamera();
+}
+
+function closeScan() {
+  var modal = $('scanModal');
+  modal.classList.remove('show');
+  if (scanStream) {
+    scanStream.getTracks().forEach(function(t) { t.stop(); });
+    scanStream = null;
+  }
+  if (scanRafId) { cancelAnimationFrame(scanRafId); scanRafId = null; }
+}
+
+async function startCamera() {
+  var video = $('scanVideo');
+  var canvas = $('scanCanvas');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $('scanTip').textContent = '当前浏览器不支持摄像头';
+    return;
+  }
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+    video.srcObject = scanStream;
+    video.setAttribute('playsinline', 'true');
+    await video.play();
+
+    var ctx = canvas.getContext('2d');
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = jsQR(imgData.data, canvas.width, canvas.height);
+
+        if (code && code.data) {
+          handleScanResult(code.data);
+          return;
+        }
+      }
+      scanRafId = requestAnimationFrame(tick);
+    }
+    tick();
+
+  } catch (err) {
+    $('scanTip').textContent = '无法打开摄像头：' + err.message;
+  }
+}
+
+function handleScanResult(text) {
+  closeScan();
+
+  // 约定二维码格式： zirui-login://<userId>.<expiresAt>.<nickname>
+  var m = text.match(/^zirui-login:\/\/(.+?)\.(\d+)\.(.*)$/);
+  if (!m) {
+    showError('二维码无效', '不是有效的登录码');
+    return;
+  }
+
+  var userId = m[1];
+  var expiresAt = parseInt(m[2], 10);
+  var nickname = decodeURIComponent(m[3] || '');
+
+  if (Date.now() > expiresAt) {
+    showError('二维码已过期', '请刷新后重新扫码');
+    return;
+  }
+
+  // 简化处理：直接把 userId / nickname 写 cookie，然后进聊天
+  CookieHelper.set('userId', userId, 7);
+  CookieHelper.set('displayName', nickname || userId, 7);
+  CookieHelper.set('isLoggedIn', 'true', 7);
+  showSuccess('✅ 扫码成功，正在进入聊天...');
+  setTimeout(function() { location.href = CHAT_URL; }, 800);
+}
+
+$('scanBtn').addEventListener('click', openScan);
+$('scanClose').addEventListener('click', closeScan);
+
+// ============================================================
+// 页面加载
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+  // 深色模式
+  var theme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+
+  checkConnection();
+
+  // 本机已有登录，显示"直接进入"条
+  var userId = CookieHelper.get('userId');
+  if (userId) {
+    $('existingSession').style.display = 'block';
+    $('existingName').textContent = CookieHelper.get('displayName') || userId;
+    $('continueBtn').addEventListener('click', function() {
+      location.href = CHAT_URL;
+    });
+  }
+});
+</script>
+
+</body>
+</html>

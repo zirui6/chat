@@ -1,248 +1,474 @@
 <!DOCTYPE html>
 <html lang="zh-CN" id="htmlRoot">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>梓睿聊天</title>
-    <link rel="stylesheet" href="style.css" />
-    <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'light')}catch(e){}</script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>梓睿 · 首页</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg-body:#eef2f7; --bg-card:#fff; --text-primary:#0b1a2e; --text-secondary:#2c3e5a;
+  --text-muted:#6b7f96; --border-color:#dce3ed; --accent:#1a4b8c;
+  --accent-light:rgba(26,75,140,0.08); --radius-md:14px; --radius-lg:20px;
+  --transition:.3s ease;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+}
+[data-theme="dark"] {
+  --bg-body:#0a1628; --bg-card:#111d33; --text-primary:#e8edf4; --text-secondary:#a8b9d0;
+  --text-muted:#6b7f96; --border-color:#1e3350; --accent:#4a8fd8;
+  --accent-light:rgba(74,143,216,0.12);
+}
+body {
+  font-family:var(--font); background:var(--bg-body); min-height:100vh;
+  color:var(--text-primary); transition:background var(--transition);
+}
+
+/* 顶栏 */
+.topbar {
+  background:var(--bg-card); border-bottom:1px solid var(--border-color);
+  padding:12px 24px; display:flex; align-items:center; gap:16px;
+  position:sticky; top:0; z-index:100;
+  box-shadow:0 2px 12px rgba(11,26,46,0.04);
+}
+.topbar .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; color:var(--text-primary); }
+.topbar .logo img { width:32px; height:32px; border-radius:8px; }
+.topbar .spacer { flex:1; }
+.topbar .user-chip {
+  display:flex; align-items:center; gap:10px; padding:6px 14px 6px 6px;
+  background:var(--bg-body); border-radius:24px; cursor:pointer;
+  transition:all var(--transition);
+}
+.topbar .user-chip:hover { background:var(--accent-light); }
+.topbar .user-chip .avatar {
+  width:32px; height:32px; border-radius:50%; background:var(--accent);
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  font-weight:600; font-size:14px;
+}
+.topbar .user-chip .name { font-size:14px; font-weight:600; }
+.topbar .theme-btn {
+  width:36px; height:36px; border:none; border-radius:50%;
+  background:var(--bg-body); color:var(--text-primary); font-size:16px;
+  cursor:pointer; transition:all var(--transition);
+}
+.topbar .theme-btn:hover { background:var(--accent-light); }
+
+/* 容器 */
+.container { max-width:900px; margin:0 auto; padding:32px 20px; }
+
+/* 欢迎卡 */
+.hero {
+  background:linear-gradient(135deg,var(--accent),#2c6ba8); color:#fff;
+  border-radius:var(--radius-lg); padding:32px 28px; margin-bottom:24px;
+  box-shadow:0 12px 40px rgba(26,75,140,0.20);
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+}
+.hero .hero-avatar {
+  width:72px; height:72px; border-radius:50%; background:rgba(255,255,255,0.22);
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px; font-weight:700; flex-shrink:0; border:3px solid rgba(255,255,255,0.4);
+}
+.hero .hero-text { flex:1; min-width:200px; }
+.hero .hero-text h1 { font-size:22px; margin-bottom:6px; }
+.hero .hero-text p { font-size:14px; opacity:.85; }
+.hero .hero-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.hero .hero-actions button, .hero .hero-actions a {
+  padding:10px 22px; border-radius:var(--radius-md); border:none;
+  font-size:14px; font-weight:600; cursor:pointer; text-decoration:none;
+  transition:all var(--transition);
+}
+.btn-white { background:#fff; color:var(--accent); }
+.btn-white:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.15); }
+.btn-ghost { background:rgba(255,255,255,0.18); color:#fff; border:1px solid rgba(255,255,255,0.35); }
+.btn-ghost:hover { background:rgba(255,255,255,0.28); }
+
+/* 卡片网格 */
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
+.card {
+  background:var(--bg-card); border:1px solid var(--border-color);
+  border-radius:var(--radius-lg); padding:22px 20px;
+  transition:all var(--transition); cursor:pointer;
+}
+.card:hover {
+  transform:translateY(-3px); border-color:var(--accent);
+  box-shadow:0 8px 28px rgba(11,26,46,0.08);
+}
+.card .card-icon { font-size:28px; margin-bottom:12px; }
+.card .card-title { font-size:16px; font-weight:700; margin-bottom:6px; color:var(--text-primary); }
+.card .card-desc { font-size:13px; color:var(--text-muted); line-height:1.5; }
+
+/* 信息列表 */
+.info-card {
+  background:var(--bg-card); border:1px solid var(--border-color);
+  border-radius:var(--radius-lg); padding:22px 20px; margin-top:16px;
+}
+.info-card h2 { font-size:15px; font-weight:700; margin-bottom:14px; color:var(--text-primary); }
+.info-row {
+  display:flex; align-items:center; gap:12px; padding:12px 0;
+  border-bottom:1px solid var(--border-color); font-size:14px;
+}
+.info-row:last-child { border-bottom:none; }
+.info-row .label { color:var(--text-muted); width:80px; flex-shrink:0; font-size:13px; }
+.info-row .value {
+  color:var(--text-primary); font-family:monospace; font-size:13px;
+  word-break:break-all; flex:1;
+}
+.info-row .copy-btn {
+  padding:4px 12px; background:var(--bg-body); border:1px solid var(--border-color);
+  border-radius:6px; color:var(--text-secondary); font-size:12px; cursor:pointer;
+  transition:all var(--transition); flex-shrink:0;
+}
+.info-row .copy-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* 加载 / 错误 */
+.center-state {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:60vh; text-align:center; padding:40px 20px;
+}
+.center-state .icon { font-size:56px; margin-bottom:16px; }
+.center-state h2 { font-size:18px; margin-bottom:8px; }
+.center-state p { font-size:14px; color:var(--text-muted); margin-bottom:20px; }
+.center-state .btn-primary {
+  padding:12px 32px; background:linear-gradient(135deg,#1a4b8c,#2c6ba8); color:#fff;
+  border:none; border-radius:var(--radius-md); font-size:15px; font-weight:600;
+  cursor:pointer; text-decoration:none; transition:all var(--transition);
+}
+.center-state .btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(26,75,140,0.30); }
+
+/* Toast */
+.toast {
+  position:fixed; top:20px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.8); color:#fff; padding:10px 20px;
+  border-radius:8px; font-size:13px; z-index:9999;
+  animation:fadeInOut 2.2s ease forwards;
+}
+@keyframes fadeInOut {
+  0% { opacity:0; transform:translate(-50%,-10px); }
+  15%,85% { opacity:1; transform:translate(-50%,0); }
+  100% { opacity:0; transform:translate(-50%,-10px); }
+}
+
+@media (max-width:600px) {
+  .topbar { padding:10px 14px; }
+  .topbar .user-chip .name { display:none; }
+  .hero { padding:24px 20px; text-align:center; justify-content:center; }
+  .hero .hero-text { text-align:center; }
+  .hero .hero-actions { width:100%; justify-content:center; }
+  .container { padding:20px 14px; }
+}
+</style>
 </head>
 <body>
 
-    <!-- ===== 未登录遮罩 ===== -->
-    <div id="loginOverlay">
-        <div class="login-box">
-            <div class="login-icon">🔒</div>
-            <h2>未登录</h2>
-            <p>请先登录梓睿账号</p>
-            <button class="btn-login" onclick="goToLogin()">🔑 去登录</button>
-            <button class="btn-login test-btn" onclick="goToTest()">🧪 测试入口（免登录）</button>
-        </div>
+<!-- 顶栏 -->
+<div class="topbar" id="topbar" style="display:none;">
+  <div class="logo">
+    <img src="https://zirui6.github.io/logo1.png" alt="Logo" onerror="this.style.display='none'" />
+    <span>梓睿</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="theme-btn" id="themeBtn" title="切换主题">🌙</button>
+  <div class="user-chip" id="userChip">
+    <div class="avatar" id="topAvatar">?</div>
+    <span class="name" id="topName">用户</span>
+  </div>
+</div>
+
+<!-- 主内容 -->
+<div class="container" id="container" style="display:none;">
+
+  <!-- 欢迎卡 -->
+  <div class="hero">
+    <div class="hero-avatar" id="heroAvatar">?</div>
+    <div class="hero-text">
+      <h1>欢迎回来，<span id="heroName">用户</span></h1>
+      <p id="heroSub">祝你有个愉快的一天 ✨</p>
     </div>
-
-    <!-- ===== Toast ===== -->
-    <div class="toast" id="toast"></div>
-
-    <!-- ===== 主应用 ===== -->
-    <div class="app" id="app">
-
-        <!-- ===== 功能栏（左侧） ===== -->
-        <div class="funcbar" id="funcbar">
-            <div class="logo" onclick="location.reload()" title="刷新">💬</div>
-
-            <button class="func-item active" data-tab="chat" title="聊天" onclick="switchTab('chat')">
-                💬
-                <span class="badge" id="totalBadge" style="display:none;">0</span>
-            </button>
-
-            <button class="func-item" data-tab="friends" title="好友" onclick="switchTab('friends')">
-                👥
-            </button>
-
-            <button class="func-item" data-tab="files" title="文件" onclick="switchTab('files')">
-                📁
-            </button>
-
-            <div class="func-spacer"></div>
-
-            <button class="func-item" data-tab="settings" title="设置" onclick="switchTab('settings')">
-                ⚙️
-            </button>
-
-            <button class="func-item avatar" id="avatarBtn" title="个人中心">
-                <img id="myAvatar" src="https://zirui6.github.io/touxiang.jpg" alt="头像" />
-            </button>
-        </div>
-
-        <!-- ===== 侧边栏 ===== -->
-        <div class="sidebar" id="sidebar">
-            <!-- 聊天列表 -->
-            <div id="sidebarChat">
-                <div class="sidebar-header">
-                    <div class="title">💬 聊天</div>
-                    <div class="sidebar-actions">
-                        <button class="sidebar-action-btn" onclick="openAddFriend()" title="添加好友">➕</button>
-                        <button class="sidebar-action-btn" onclick="switchTab('settings')" title="设置">⚙️</button>
-                    </div>
-                </div>
-                <div class="sidebar-search">
-                    <input type="text" id="searchInput" placeholder="🔍 搜索聊天..." />
-                </div>
-                <div class="chat-list" id="chatList">
-                    <div class="loading-placeholder">加载中...</div>
-                </div>
-            </div>
-
-            <!-- 好友列表 -->
-            <div id="sidebarFriends" style="display:none;">
-                <div class="sidebar-header">
-                    <div class="title">👥 好友</div>
-                    <button class="sidebar-action-btn" onclick="openAddFriend()">➕</button>
-                </div>
-                <div class="sidebar-search">
-                    <input type="text" id="friendSearchInput" placeholder="🔍 搜索好友..." />
-                </div>
-                <div class="chat-list" id="friendList">
-                    <div class="empty-state-sidebar">
-                        <div class="empty-icon">👥</div>
-                        <p>暂无好友</p>
-                        <p class="empty-hint">点击 ➕ 添加好友</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 设置 -->
-            <div id="sidebarSettings" style="display:none;">
-                <div class="sidebar-header">
-                    <div class="title">⚙️ 设置</div>
-                    <button class="sidebar-action-btn" onclick="switchTab('chat')">✕</button>
-                </div>
-                <div class="settings-content">
-                    <div class="settings-group-title">通用</div>
-                    <div class="settings-item" onclick="openTest()">
-                        <span class="settings-icon">🧪</span>
-                        <div class="settings-info">
-                            <div class="settings-name">测试入口</div>
-                            <div class="settings-desc">免登录测试聊天</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-item" onclick="openAddFriend()">
-                        <span class="settings-icon">➕</span>
-                        <div class="settings-info">
-                            <div class="settings-name">添加好友</div>
-                            <div class="settings-desc">搜索用户ID或用户名</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-group-title">外观</div>
-                    <div class="settings-item" onclick="toggleTheme()">
-                        <span class="settings-icon">🌓</span>
-                        <div class="settings-info">
-                            <div class="settings-name">切换主题</div>
-                            <div class="settings-desc" id="themeStatus">浅色模式</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-item" onclick="switchToPhone()">
-                        <span class="settings-icon">📱</span>
-                        <div class="settings-info">
-                            <div class="settings-name">切换到手机版</div>
-                            <div class="settings-desc">打开手机适配界面</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-group-title">数据</div>
-                    <div class="settings-item" onclick="clearAllData()">
-                        <span class="settings-icon">🗑️</span>
-                        <div class="settings-info">
-                            <div class="settings-name">清除缓存</div>
-                            <div class="settings-desc">清除本地消息缓存</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-item" onclick="logout()" style="border-bottom:none;">
-                        <span class="settings-icon">🚪</span>
-                        <div class="settings-info">
-                            <div class="settings-name" style="color:#ef4444;">退出登录</div>
-                            <div class="settings-desc">退出当前账号</div>
-                        </div>
-                        <span class="settings-arrow">→</span>
-                    </div>
-                    <div class="settings-footer">
-                        <span>版本 2.0</span>
-                        <span id="deviceInfo">🖥️ 桌面版</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== 聊天窗口 ===== -->
-        <div class="chat-window" id="chatWindow">
-            <div class="empty-state" id="emptyState">
-                <div class="empty-icon">💬</div>
-                <h3>选择聊天</h3>
-                <p>从左侧选择好友开始聊天</p>
-            </div>
-
-            <!-- 聊天头部 - 桌面版顶栏 -->
-            <div class="chat-header" id="chatHeader" style="display:none;">
-                <div class="chat-header-left">
-                    <div class="user-info">
-                        <span class="online-dot online" id="onlineStatusDot"></span>
-                        <div>
-                            <div class="name" id="chatName">用户</div>
-                            <div class="status" id="chatStatus">
-                                <span id="onlineStatusText">在线</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="chat-header-right">
-                    <button class="btn-icon" onclick="showToast('更多功能', 'info')">⋯</button>
-                </div>
-            </div>
-
-            <div class="message-list" id="messageList"></div>
-
-            <div class="chat-input" id="chatInput" style="display:none;">
-                <div class="tools">
-                    <button class="tool-btn" onclick="showToast('😊 表情功能开发中', 'info')">😊</button>
-                    <button class="tool-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()">📎</button>
-                    <button class="tool-btn" id="imageBtn" onclick="document.getElementById('imageInput').click()">🖼️</button>
-                    <input type="file" id="fileInput" accept="*/*" style="display:none;" />
-                    <input type="file" id="imageInput" accept="image/*" style="display:none;" />
-                </div>
-                <div class="input-row">
-                    <textarea id="messageInput" rows="1" placeholder="输入消息..." maxlength="10000"></textarea>
-                    <button class="btn-send" id="sendBtn">发送</button>
-                </div>
-            </div>
-        </div>
+    <div class="hero-actions">
+      <a href="chat.html" class="btn-white">💬 进入聊天</a>
+      <button class="btn-ghost" id="logoutBtn">退出登录</button>
     </div>
+  </div>
 
-    <!-- ===== 添加好友弹窗 ===== -->
-    <div class="modal-overlay" id="addFriendModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>➕ 添加好友</h3>
-                <button class="modal-close" onclick="closeAddFriend()">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>用户ID 或 用户名</label>
-                    <input type="text" id="addFriendInput" placeholder="请输入用户ID或用户名" />
-                </div>
-                <div class="form-group">
-                    <label>验证消息（选填）</label>
-                    <input type="text" id="addFriendMsg" placeholder="你好，加个好友吧！" />
-                </div>
-                <button class="btn-primary" id="addFriendSubmit">🔍 搜索并添加</button>
-                <div id="searchResults" style="margin-top:12px;"></div>
-            </div>
-        </div>
+  <!-- 功能卡片 -->
+  <div class="grid">
+    <div class="card" onclick="location.href='chat.html'">
+      <div class="card-icon">💬</div>
+      <div class="card-title">聊天</div>
+      <div class="card-desc">和好友聊天、公共频道、群组和陌生人社区</div>
     </div>
-
-    <!-- ===== 二维码弹窗 ===== -->
-    <div class="modal-overlay" id="qrModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>📱 我的二维码</h3>
-                <button class="modal-close" onclick="closeQR()">✕</button>
-            </div>
-            <div class="modal-body" style="text-align:center;">
-                <div id="qrcode" style="display:flex;justify-content:center;padding:10px 0;">
-                    <div style="width:180px;height:180px;background:#222240;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666688;">二维码加载中...</div>
-                </div>
-                <p style="margin-top:12px;font-size:13px;color:#8a8aaa;">
-                    用户ID: <strong id="qrUserId">加载中...</strong>
-                </p>
-                <button class="btn-primary" id="copyIdBtn" style="margin-top:8px;">📋 复制ID</button>
-            </div>
-        </div>
+    <div class="card" onclick="location.href='user.html'">
+      <div class="card-icon">👤</div>
+      <div class="card-title">用户中心</div>
+      <div class="card-desc">查看和修改个人资料、安全设置</div>
     </div>
+    <div class="card" onclick="alert('功能开发中')">
+      <div class="card-icon">📁</div>
+      <div class="card-title">云盘</div>
+      <div class="card-desc">存储和分享你的文件（开发中）</div>
+    </div>
+    <div class="card" onclick="alert('功能开发中')">
+      <div class="card-icon">⚙️</div>
+      <div class="card-title">设置</div>
+      <div class="card-desc">账号、隐私和偏好设置（开发中）</div>
+    </div>
+  </div>
 
-    <script src="script.js"></script>
+  <!-- 账号信息 -->
+  <div class="info-card">
+    <h2>📋 账号信息</h2>
+    <div class="info-row">
+      <span class="label">用户 ID</span>
+      <span class="value" id="infoId">-</span>
+      <button class="copy-btn" data-copy="infoId">复制</button>
+    </div>
+    <div class="info-row">
+      <span class="label">昵称</span>
+      <span class="value" id="infoName" style="font-family:inherit;">-</span>
+    </div>
+    <div class="info-row">
+      <span class="label">邮箱</span>
+      <span class="value" id="infoEmail" style="font-family:inherit;">-</span>
+    </div>
+    <div class="info-row">
+      <span class="label">角色</span>
+      <span class="value" id="infoRole" style="font-family:inherit;">-</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- 未登录 / 加载中 -->
+<div class="center-state" id="loadingState">
+  <div class="icon">⏳</div>
+  <h2>加载中...</h2>
+  <p>正在检查登录状态</p>
+</div>
+
+<div class="center-state" id="guestState" style="display:none;">
+  <div class="icon">🔒</div>
+  <h2>请先登录</h2>
+  <p>你还没有登录，请登录后访问</p>
+  <a href="login.html" class="btn-primary">前往登录</a>
+</div>
+
+<script>
+// ============================================================
+// Cookie 工具
+// ============================================================
+var CookieHelper = {
+  get: function(name) {
+    var nameEQ = name + '=';
+    var ca = document.cookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+      var c = ca[i];
+      while (c.charAt(0) === ' ') c = c.substring(1);
+      if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length));
+    }
+    return null;
+  },
+  set: function(name, value, days) {
+    var expires = '';
+    if (days) {
+      var d = new Date();
+      d.setTime(d.getTime() + days * 86400000);
+      expires = '; expires=' + d.toUTCString();
+    }
+    document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+  },
+  del: function(name) {
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  }
+};
+
+// ============================================================
+// 工具
+// ============================================================
+function $(id) { return document.getElementById(id); }
+
+function formatId(id) {
+  if (!id) return '-';
+  return String(id).match(/.{1,5}/g).join('-');
+}
+
+function toast(msg) {
+  var d = document.createElement('div');
+  d.className = 'toast';
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(function() { d.remove(); }, 2200);
+}
+
+// ============================================================
+// 读取登录用户：URL 参数 > cookie > sessionStorage
+// ============================================================
+function loadUser() {
+  // 1. URL 参数优先（登录页跳过来时带的）
+  var params = new URLSearchParams(location.search);
+  var userParam = params.get('user');
+  if (userParam) {
+    try {
+      var u = JSON.parse(decodeURIComponent(userParam));
+      if (u && u.id) {
+        // 补写 cookie 和 session，保持后续一致
+        var displayName = u.username || (u.email ? u.email.split('@')[0] : '用户');
+        CookieHelper.set('userId', u.id, 7);
+        CookieHelper.set('displayName', displayName, 7);
+        CookieHelper.set('userEmail', u.email || '', 7);
+        CookieHelper.set('role', u.role || 'user', 7);
+        CookieHelper.set('user_data', JSON.stringify(u), 7);
+        CookieHelper.set('isLoggedIn', 'true', 7);
+
+        sessionStorage.setItem('userId', u.id);
+        sessionStorage.setItem('displayName', displayName);
+        sessionStorage.setItem('userEmail', u.email || '');
+        sessionStorage.setItem('role', u.role || 'user');
+        sessionStorage.setItem('user_data', JSON.stringify(u));
+        sessionStorage.setItem('isLoggedIn', 'true');
+
+        // 清掉 URL 上的参数，避免刷新重复写入
+        history.replaceState({}, document.title, location.pathname);
+        return u;
+      }
+    } catch (e) {
+      console.warn('URL 参数解析失败:', e);
+    }
+  }
+
+  // 2. cookie
+  var userId = CookieHelper.get('userId');
+  if (userId) {
+    var userDataStr = CookieHelper.get('user_data');
+    if (userDataStr) {
+      try {
+        var u = JSON.parse(userDataStr);
+        if (u && u.id) return u;
+      } catch (e) {}
+    }
+    // cookie 只有分散字段
+    return {
+      id: userId,
+      username: CookieHelper.get('displayName') || '',
+      email: CookieHelper.get('userEmail') || '',
+      role: CookieHelper.get('role') || 'user'
+    };
+  }
+
+  // 3. sessionStorage
+  var sessUser = sessionStorage.getItem('user_data');
+  if (sessUser) {
+    try {
+      var u = JSON.parse(sessUser);
+      if (u && u.id) return u;
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+// ============================================================
+// 渲染
+// ============================================================
+function render(user) {
+  var displayName = user.username || (user.email ? user.email.split('@')[0] : '用户');
+  var initial = (displayName || '?').charAt(0).toUpperCase();
+
+  $('topAvatar').textContent = initial;
+  $('topName').textContent = displayName;
+  $('heroAvatar').textContent = initial;
+  $('heroName').textContent = displayName;
+
+  // 早上 / 下午 / 晚上
+  var hour = new Date().getHours();
+  var greet = hour < 6 ? '凌晨好' : hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好';
+  $('heroSub').textContent = greet + '，祝你有个愉快的一天 ✨';
+
+  $('infoId').textContent = formatId(user.id);
+  $('infoId').dataset.raw = user.id;
+  $('infoName').textContent = displayName;
+  $('infoEmail').textContent = user.email || '-';
+  $('infoRole').textContent = user.role || 'user';
+
+  $('topbar').style.display = 'flex';
+  $('container').style.display = 'block';
+  $('loadingState').style.display = 'none';
+  $('guestState').style.display = 'none';
+}
+
+// ============================================================
+// 复制
+// ============================================================
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  var targetId = btn.dataset.copy;
+  var el = $(targetId);
+  if (!el) return;
+  var text = el.dataset.raw || el.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() { toast('✅ 已复制'); });
+  } else {
+    var input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    toast('✅ 已复制');
+  }
+});
+
+// ============================================================
+// 退出登录
+// ============================================================
+function logout() {
+  if (!confirm('确定退出登录吗？')) return;
+
+  ['auth_token', 'user_data', 'isLoggedIn', 'userId', 'userEmail', 'displayName', 'role']
+    .forEach(function(k) { CookieHelper.del(k); });
+  sessionStorage.clear();
+
+  location.href = 'login.html';
+}
+
+// ============================================================
+// 主题
+// ============================================================
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  var current = document.documentElement.getAttribute('data-theme') || 'light';
+  var next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+  applyTheme(localStorage.getItem('theme') || 'light');
+  $('themeBtn').addEventListener('click', toggleTheme);
+  $('logoutBtn').addEventListener('click', logout);
+
+  // 用户中心点击
+  $('userChip').addEventListener('click', function() {
+    location.href = 'user.html';
+  });
+
+  var user = loadUser();
+  if (user && user.id) {
+    render(user);
+    console.log('✅ 已登录:', user.username || user.id);
+  } else {
+    $('loadingState').style.display = 'none';
+    $('guestState').style.display = 'flex';
+    console.log('👤 未登录');
+  }
+});
+</script>
+
 </body>
 </html>
