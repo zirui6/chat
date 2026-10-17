@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN" id="htmlRoot" data-theme="light" data-size="normal" data-density="standard">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>梓睿聊天</title>
+<link rel="icon" href="https://zirui6.github.io/logo1.png">
+<link rel="stylesheet" href="chat.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* 尽早应用主题 / 字号 / 密度，避免闪白，并标记手机端 */
+(function () {
+  try {
+    var d = document.documentElement;
+    d.classList.add('phone');
+    var mq = window.matchMedia('(pointer:coarse)');
+    if (mq.matches || (navigator.maxTouchPoints || 0) > 0) d.classList.add('touch');
+    var t = localStorage.getItem('theme') || 'light';
+    var s = null;
+    try { s = JSON.parse(localStorage.getItem('chat_settings') || 'null'); } catch (e) {}
+    if (s && s.theme && s.theme !== 'system') t = s.theme;
+    if (t === 'system') {
+      t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    d.setAttribute('data-theme', t);
+    d.setAttribute('data-size', (s && s.fontSize) || 'normal');
+    d.setAttribute('data-density', (s && s.bubbleDensity) || 'standard');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t === 'dark' ? '#141414' : '#f7f7f7');
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <p>正在进入聊天…</p>
+</div>
+
+<!-- ============================================================
+     主界面：会话 / 通讯录 / 发现 / 我
+     ============================================================ -->
+<div class="app" id="app" style="display:none;">
+
+  <header class="tab-header">
+    <span class="tab-title" id="tabTitle">微信</span>
+    <span class="tab-actions">
+      <button class="icon-btn" data-icon="search" id="btnTopSearch" title="搜索"></button>
+      <button class="icon-btn" data-icon="plus" id="btnTopAdd" title="更多"></button>
+    </span>
+  </header>
+
+  <!-- 搜索条 -->
+  <div class="search-bar" id="searchBar">
+    <div class="search-field">
+      <span class="search-icon"></span>
+      <input id="searchInput" type="search" placeholder="搜索" autocomplete="off" enterkeyhint="search">
+    </div>
+  </div>
+
+  <main class="tab-content" id="tabContent">
+    <div class="tab-pane" data-pane="chats" id="paneChats">
+      <div class="list" id="list"></div>
+    </div>
+
+    <div class="tab-pane" data-pane="contacts" id="paneContacts">
+      <div class="list" id="listContacts"></div>
+    </div>
+
+    <div class="tab-pane" data-pane="discover" id="paneDiscover">
+      <div class="list" id="listDiscover"></div>
+    </div>
+
+    <div class="tab-pane" data-pane="me" id="paneMe">
+      <div class="profile-card">
+        <div class="avatar-lg" id="meAvatar">?</div>
+        <div class="profile-name" id="meName">用户</div>
+        <div class="profile-id" id="meId">-</div>
+      </div>
+      <div class="group">
+        <div class="cell" data-act="settings">
+          <span class="cell-label">设置</span>
+          <span class="cell-value" id="cellSettingsHint"></span>
+          <span class="cell-arrow"></span>
+        </div>
+        <a class="cell" href="index.html">
+          <span class="cell-label">返回首页</span>
+          <span class="cell-arrow"></span>
+        </a>
+        <div class="cell" data-act="about">
+          <span class="cell-label">关于</span>
+          <span class="cell-value" id="cellVersion"></span>
+          <span class="cell-arrow"></span>
+        </div>
+      </div>
+      <div class="group">
+        <div class="cell danger" data-act="logout">
+          <span class="cell-label">退出登录</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部标签栏 -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-item active" data-tab="chats">
+      <span class="tab-icon" data-icon="chat"></span>
+      <span class="tab-label">微信</span>
+      <span class="tab-badge" id="tabBadge">0</span>
+    </button>
+    <button class="tab-item" data-tab="contacts">
+      <span class="tab-icon" data-icon="contacts"></span>
+      <span class="tab-label">通讯录</span>
+    </button>
+    <button class="tab-item" data-tab="discover">
+      <span class="tab-icon" data-icon="discover"></span>
+      <span class="tab-label">发现</span>
+    </button>
+    <button class="tab-item" data-tab="me">
+      <span class="tab-icon" data-icon="me"></span>
+      <span class="tab-label">我</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ============================================================
+     聊天页（全屏滑入）
+     ============================================================ -->
+<section class="chat-view" id="chatView">
+  <header class="nav-bar">
+    <button class="nav-back" id="chatBack" aria-label="返回"><span class="chev-left"></span></button>
+    <div class="nav-center">
+      <span class="nav-title" id="chatTitle">聊天</span>
+      <span class="nav-sub" id="chatSub"></span>
+    </div>
+    <button class="nav-action" data-icon="more" id="chatMore" aria-label="更多"></button>
+  </header>
+
+  <div class="messages" id="messages">
+    <div class="empty-state" id="msgEmpty">
+      <div class="empty-logo"></div>
+      <p>还没有消息，发送第一条吧</p>
+    </div>
+  </div>
+
+  <footer class="composer" id="composer">
+    <button class="composer-icon" data-icon="emoji" id="btnEmoji" aria-label="表情"></button>
+    <textarea id="msgInput" rows="1" placeholder="发消息…" enterkeyhint="send"></textarea>
+    <button class="send-btn" id="sendBtn">发送</button>
+  </footer>
+  <div class="readonly-note" id="readonlyNote" style="display:none;">官方通知频道不支持发送消息</div>
+</section>
+
+<!-- ============================================================
+     设置页（全屏滑入）
+     ============================================================ -->
+<section class="settings-view" id="settingsView">
+  <header class="nav-bar">
+    <button class="nav-back" id="setBack" aria-label="返回"><span class="chev-left"></span></button>
+    <div class="nav-center"><span class="nav-title">设置</span></div>
+    <span class="nav-action-placeholder"></span>
+  </header>
+
+  <div class="settings-scroll" id="settingsScroll">
+    <!-- 账号与安全 -->
+    <div class="group-title">账号与安全</div>
+    <div class="group">
+      <div class="cell">
+        <div class="avatar-md" id="stAvatar">?</div>
+        <div class="cell-main">
+          <span class="cell-label" id="stName">用户</span>
+          <span class="cell-desc" id="stId">-</span>
+        </div>
+        <button class="mini-btn" id="btnCopyId">复制 ID</button>
+      </div>
+      <div class="cell">
+        <span class="cell-label">邮箱</span>
+        <span class="cell-value" id="stEmail">-</span>
+      </div>
+      <div class="cell">
+        <span class="cell-label">账号角色</span>
+        <span class="cell-value" id="stRole">user</span>
+      </div>
+      <div class="cell">
+        <span class="cell-label">修改昵称</span>
+        <input class="cell-input" id="stNickname" maxlength="20" placeholder="输入新昵称">
+        <button class="mini-btn primary" id="btnSaveNick">保存</button>
+      </div>
+      <div class="cell stack">
+        <span class="cell-label">修改密码</span>
+        <input class="cell-input full" id="stOldPwd" type="password" placeholder="当前密码" autocomplete="current-password">
+        <input class="cell-input full" id="stNewPwd" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">
+        <input class="cell-input full" id="stNewPwd2" type="password" placeholder="确认新密码" autocomplete="new-password">
+        <button class="mini-btn primary" id="btnChangePwd" style="align-self:flex-start;margin-top:2px;">修改密码</button>
+      </div>
+    </div>
+
+    <div class="group-title" id="deviceTitle">登录设备管理</div>
+    <div class="group" id="deviceList">
+      <div class="cell"><span class="cell-desc">加载中…</span></div>
+    </div>
+
+    <!-- 通用设置 -->
+    <div class="group-title">通用设置</div>
+    <div class="group">
+      <div class="cell stack">
+        <span class="cell-label">深色模式</span>
+        <div class="seg" id="segTheme">
+          <button data-value="light">浅色</button>
+          <button data-value="dark">深色</button>
+          <button data-value="system">跟随系统</button>
+        </div>
+      </div>
+      <div class="cell stack">
+        <span class="cell-label">字体大小</span>
+        <div class="seg" id="segSize">
+          <button data-value="small">小</button>
+          <button data-value="normal">标准</button>
+          <button data-value="large">大</button>
+          <button data-value="xlarge">特大</button>
+        </div>
+      </div>
+      <div class="cell stack">
+        <span class="cell-label">消息气泡密度</span>
+        <div class="seg" id="segDensity">
+          <button data-value="compact">紧凑</button>
+          <button data-value="standard">标准</button>
+          <button data-value="loose">宽松</button>
+        </div>
+      </div>
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">显示消息预览</span>
+          <span class="cell-desc">会话列表显示最后一条消息</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swPreview" checked><span class="track"></span></label>
+      </div>
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">显示未读数</span>
+          <span class="cell-desc">标签栏与列表显示未读数字</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swBadge" checked><span class="track"></span></label>
+      </div>
+    </div>
+
+    <!-- 消息通知 -->
+    <div class="group-title">消息通知</div>
+    <div class="group">
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">新消息提示音</span>
+          <span class="cell-desc">收到新消息时播放提示音</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swSound" checked><span class="track"></span></label>
+      </div>
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">桌面通知</span>
+          <span class="cell-desc" id="notifyDesc">后台时推送系统通知</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swDesktop"><span class="track"></span></label>
+      </div>
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">免打扰</span>
+          <span class="cell-desc">静音且不弹通知（未读数仍统计）</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swDnd"><span class="track"></span></label>
+      </div>
+      <div class="cell" data-act="testNotify">
+        <span class="cell-label">发送测试通知</span>
+        <span class="cell-arrow"></span>
+      </div>
+    </div>
+
+    <!-- 聊天与存储 -->
+    <div class="group-title">聊天与存储</div>
+    <div class="group">
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">自动下载图片</span>
+          <span class="cell-desc">自动加载公告配图</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="swAutoImg" checked><span class="track"></span></label>
+      </div>
+      <div class="cell">
+        <div class="cell-main">
+          <span class="cell-label">本机缓存占用</span>
+          <span class="cell-desc" id="cacheDesc">统计中…</span>
+        </div>
+        <button class="mini-btn" id="btnRefreshCache">刷新</button>
+      </div>
+      <div class="cell" data-act="clearChat">
+        <span class="cell-label">清空当前会话记录</span>
+        <span class="cell-desc" id="clearChatHint">未打开会话</span>
+        <span class="cell-arrow"></span>
+      </div>
+      <div class="cell" data-act="clearAll">
+        <span class="cell-label">清空全部聊天记录</span>
+        <span class="cell-arrow"></span>
+      </div>
+      <div class="cell" data-act="resetSet">
+        <span class="cell-label">恢复默认设置</span>
+        <span class="cell-arrow"></span>
+      </div>
+    </div>
+
+    <!-- 关于与退出 -->
+    <div class="group-title">关于与退出</div>
+    <div class="group">
+      <div class="cell">
+        <span class="cell-label">版本</span>
+        <span class="cell-value">1.0.0 · 手机版</span>
+      </div>
+      <div class="cell" data-act="checkUpdate">
+        <span class="cell-label">检查更新</span>
+        <span class="cell-value" id="updateState"></span>
+        <span class="cell-arrow"></span>
+      </div>
+      <div class="cell" data-act="checkNet">
+        <span class="cell-label">网络检测</span>
+        <span class="cell-value" id="netState"></span>
+        <span class="cell-arrow"></span>
+      </div>
+      <div class="cell" data-act="openWeb">
+        <span class="cell-label">打开电脑版</span>
+        <span class="cell-arrow"></span>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="cell danger" data-act="logout">
+        <span class="cell-label">退出登录</span>
+      </div>
+    </div>
+    <div class="settings-foot">梓睿聊天 · 手机版 v1.0.0</div>
+  </div>
+</section>
+
+<!-- 遮罩 / 弹出菜单 / 轻提示 -->
+<div class="mask" id="mask"></div>
+<div class="action-sheet" id="actionSheet"></div>
+<div class="toast" id="toast"></div>
+
+<script src="phone.js"></script>
+</body>
+</html>

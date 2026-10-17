@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN" id="htmlRoot" data-theme="light" data-size="normal" data-density="standard">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>梓睿 · 首页</title>
+<link rel="icon" href="https://zirui6.github.io/logo1.png">
+<script>
+(function () {
+  try {
+    var d = document.documentElement;
+    d.classList.add('phone');
+    if (window.matchMedia('(pointer:coarse)').matches || (navigator.maxTouchPoints || 0) > 0) d.classList.add('touch');
+    var t = localStorage.getItem('theme') || 'light';
+    var s = null;
+    try { s = JSON.parse(localStorage.getItem('chat_settings') || 'null'); } catch (e) {}
+    if (s && s.theme && s.theme !== 'system') t = s.theme;
+    if (t === 'system') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    d.setAttribute('data-theme', t);
+    d.setAttribute('data-size', (s && s.fontSize) || 'normal');
+    d.setAttribute('data-density', (s && s.bubbleDensity) || 'standard');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t === 'dark' ? '#141414' : '#f7f7f7');
+  } catch (e) {}
+})();
+</script>
+<link rel="stylesheet" href="chat.css">
+</head>
+<body>
+
+<!-- 未登录 -->
+<div class="center-state" id="guestState" style="display:none;">
+  <div class="empty-logo"></div>
+  <h2>请先登录</h2>
+  <p>你还没有登录，请登录后访问</p>
+  <a class="btn-primary" href="login.html">前往登录</a>
+</div>
+
+<!-- 主界面 -->
+<div class="app" id="app" style="display:none;">
+
+  <header class="tab-header">
+    <span class="tab-title" id="tabTitle">微信</span>
+    <span class="tab-actions">
+      <button class="icon-btn" data-icon="search" id="btnTopSearch" title="搜索"></button>
+      <button class="icon-btn" data-icon="plus" id="btnTopAdd" title="更多"></button>
+    </span>
+  </header>
+
+  <div class="search-bar" id="searchBar">
+    <div class="search-field">
+      <span class="search-icon"></span>
+      <input id="searchInput" type="search" placeholder="搜索用户 ID 或昵称" autocomplete="off" enterkeyhint="search">
+    </div>
+  </div>
+
+  <main class="tab-content" id="tabContent">
+    <!-- 微信 -->
+    <div class="tab-pane active" data-pane="chats">
+      <div class="group-title">功能</div>
+      <div class="group">
+        <a class="cell" href="chat.html">
+          <span class="avatar" aria-hidden="true">💬</span>
+          <span class="cell-main">
+            <span class="cell-label">聊天</span>
+            <span class="cell-desc">好友、群聊与公共频道</span>
+          </span>
+          <span class="cell-arrow"></span>
+        </a>
+        <a class="cell" href="login.html">
+          <span class="avatar grey" aria-hidden="true">👤</span>
+          <span class="cell-main">
+            <span class="cell-label">账号</span>
+            <span class="cell-desc" id="homeAccountHint">查看登录状态</span>
+          </span>
+          <span class="cell-arrow"></span>
+        </a>
+        <div class="cell" data-act="goChat" data-focus="search">
+          <span class="avatar official" aria-hidden="true">🔍</span>
+          <span class="cell-main">
+            <span class="cell-label">找人</span>
+            <span class="cell-desc">按 ID 或昵称搜索用户</span>
+          </span>
+          <span class="cell-arrow"></span>
+        </div>
+      </div>
+
+      <div class="group-title">最近会话</div>
+      <div class="group" id="recentList">
+        <div class="cell"><span class="cell-desc">打开聊天页后会在这里显示最近会话</span></div>
+      </div>
+      <div class="settings-foot">梓睿聊天 · 手机版 v1.0.0</div>
+    </div>
+
+    <!-- 通讯录 -->
+    <div class="tab-pane" data-pane="contacts">
+      <div class="empty-tip">通讯录在聊天页内查看<br>点「聊天 → 通讯录」浏览好友</div>
+    </div>
+
+    <!-- 发现 -->
+    <div class="tab-pane" data-pane="discover">
+      <div class="group-title">发现</div>
+      <div class="group">
+        <div class="cell" data-act="goChat" data-focus="discover">
+          <span class="avatar official" aria-hidden="true">🌐</span>
+          <span class="cell-main">
+            <span class="cell-label">陌生人社区</span>
+            <span class="cell-desc">浏览并和陌生用户打招呼</span>
+          </span>
+          <span class="cell-arrow"></span>
+        </div>
+        <div class="cell" data-act="goChat" data-focus="group">
+          <span class="avatar" aria-hidden="true">👥</span>
+          <span class="cell-main">
+            <span class="cell-label">发起群聊</span>
+            <span class="cell-desc">创建新群并邀请好友</span>
+          </span>
+          <span class="cell-arrow"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 我 -->
+    <div class="tab-pane" data-pane="me">
+      <div class="profile-card">
+        <div class="avatar-lg" id="meAvatar">?</div>
+        <div class="profile-name" id="meName">用户</div>
+        <div class="profile-id" id="meId">-</div>
+      </div>
+      <div class="group">
+        <div class="cell" data-act="goChat" data-focus="settings">
+          <span class="cell-label">设置</span>
+          <span class="cell-value" id="meSettingsHint">账号、外观、通知</span>
+          <span class="cell-arrow"></span>
+        </div>
+        <a class="cell" href="login.html">
+          <span class="cell-label">切换账号 / 登录</span>
+          <span class="cell-arrow"></span>
+        </a>
+      </div>
+      <div class="group">
+        <div class="cell" data-act="toggleTheme">
+          <span class="cell-label">深色模式</span>
+          <span class="cell-value" id="meThemeHint">浅色</span>
+          <span class="cell-arrow"></span>
+        </div>
+        <div class="cell" data-act="about">
+          <span class="cell-label">关于</span>
+          <span class="cell-value">v1.0.0</span>
+          <span class="cell-arrow"></span>
+        </div>
+      </div>
+      <div class="group">
+        <div class="cell danger" data-act="logout">
+          <span class="cell-label">退出登录</span>
+        </div>
+      </div>
+      <div class="settings-foot">梓睿聊天 · 手机版</div>
+    </div>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-item active" data-tab="chats">
+      <span class="tab-icon" data-icon="chat"></span>
+      <span class="tab-label">微信</span>
+      <span class="tab-badge" id="tabBadge">0</span>
+    </button>
+    <button class="tab-item" data-tab="contacts">
+      <span class="tab-icon" data-icon="contacts"></span>
+      <span class="tab-label">通讯录</span>
+    </button>
+    <button class="tab-item" data-tab="discover">
+      <span class="tab-icon" data-icon="discover"></span>
+      <span class="tab-label">发现</span>
+    </button>
+    <button class="tab-item" data-tab="me">
+      <span class="tab-icon" data-icon="me"></span>
+      <span class="tab-label">我</span>
+    </button>
+  </nav>
+</div>
+
+<div class="mask" id="mask"></div>
+<div class="action-sheet" id="actionSheet"></div>
+<div class="toast" id="toast"></div>
+
+<script src="phone.js"></script>
+</body>
+</html>
